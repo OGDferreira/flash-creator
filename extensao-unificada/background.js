@@ -917,10 +917,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     notePublishingResponse: () => notePublishingResponse(msg.status, msg.data),
     setStoryConfig: () => handleSetStoryConfig(msg.config),
     getStoryConfig: () => handleGetStoryConfig(),
-    afEmail: () => afEmail(),
-    afCodeSnapshot: () => afCodeSnapshot(msg.email),
-    afCode: () => afCode(msg.email, { previousCode: msg.previousCode, requestedAt: msg.requestedAt }),
-    afNovoEmail: () => afNovoEmail(msg.excludeEmail),
   };
 
   const handler = async[msg.type];
@@ -976,10 +972,6 @@ void abrirCadastro();
 // sem pop-up. Cada chamada é curta (uma verificação); o content script repete.
 const AF_BASE = 'http://127.0.0.1:8777';
 const AF_TOKEN = 'a0f2baf36ee238a7d9b3f2d06da4fa05';
-// Id único deste perfil/extensão. O servidor usa pra medir quantos pedidos
-// simultâneos existem (vários perfis/pessoas) e comprar Gmail na medida.
-const AF_CLIENT = 'c-' + Math.random().toString(36).slice(2, 10);
-let afBuyTriggered = false;
 async function afNotifySuspended(payload = {}) {
   if (typeof WebSocket === 'undefined') return { ok: false, error: 'WebSocket indisponível no service worker.' };
   return await new Promise((resolve) => {
@@ -998,113 +990,4 @@ async function afNotifySuspended(payload = {}) {
       socket.onerror = () => { clearTimeout(timer); finish({ ok: false, error: 'Falha no canal do Flash Creator.' }); };
     } catch (e) { clearTimeout(timer); finish({ ok: false, error: String(e?.message || e) }); }
   });
-}
-async function afApi(path, opts) {
-  const sep = path.includes('?') ? '&' : '?';
-  const r = await fetch(AF_BASE + path + sep + 'token=' + AF_TOKEN, opts);
-  if (!r.ok) throw new Error('API ' + r.status);
-  return r.json();
-}
-async function afLista() {
-  try { const { flow } = await afApi('/api/flow'); return flow || []; }
-  catch { return []; }
-}
-function afRegistroEstornado(g) {
-  const status = String(g?.status || g?.state || g?.order_status || g?.order_state || '').toLowerCase();
-  const flags = [g?.refunded, g?.refunded_at, g?.estornado, g?.reembolsado, g?.reversed, g?.storno];
-  return flags.some((value) => value === true || (typeof value === 'string' && value.trim()))
-    || /estorn|reembols|refund|revers|cancel|chargeback|returned/.test(status);
-}
-function afGmailValido(g) {
-  return Boolean(g?.email && !g.exhausted && !afRegistroEstornado(g));
-}
-// Pede 1 Gmail ao servidor (POST /api/claim). O SERVIDOR escolhe um Gmail livre
-// e o marca "em uso" na hora, então pedidos simultâneos (vários perfis/pessoas)
-// recebem Gmails DIFERENTES — nunca o mesmo. Preferência: Gmail normal primeiro;
-// sem nenhum, o servidor compra sozinho conforme a demanda e devolve "aguarde"
-// (o content script repete). Registros estornados não entram no pool do servidor.
-async function afEmail() {
-  try {
-    const r = await afApi('/api/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client: AF_CLIENT }) });
-    if (r && r.ok && r.email) return { ok: true, email: r.email };
-    return { ok: false, waiting: true };
-  } catch (e) { return { ok: false, error: 'pedido de Gmail falhou: ' + e.message }; }
-}
-function afCodeValue(item) {
-  return item?.code == null ? '' : String(item.code).trim();
-}
-function afCodeTime(item) {
-  const value = item?.receivedAt || item?.createdAt || item?.updatedAt || item?.timestamp || item?.date;
-  let time = value ? Date.parse(value) || Number(value) : 0;
-  if (Number.isFinite(time) && time > 0 && time < 100000000000) time *= 1000;
-  return Number.isFinite(time) ? time : 0;
-}
-// Snapshot usado antes de enviar o cadastro. O código posterior precisa ser
-// diferente do snapshot e, quando a API informa horário, posterior ao envio.
-async function afCodeSnapshot(email) {
-  try {
-    const { latest } = await afApi('/api/flow/latest');
-    if (latest && afCodeValue(latest) && (!email || !latest.email || latest.email === email)) {
-      return { ok: true, code: afCodeValue(latest), receivedAt: afCodeTime(latest) };
-    }
-  } catch { /* tenta pela lista */ }
-  const flow = await afLista();
-  const hit = flow.find((g) => g.email === email && afCodeValue(g));
-  if (hit) return { ok: true, code: afCodeValue(hit), receivedAt: afCodeTime(hit) };
-  // pool normal (Gmail manual) — códigos que vão pra aba "Códigos"
-  if (email) {
-    try {
-      const { latest } = await afApi('/api/latest?email=' + encodeURIComponent(email));
-      if (latest && afCodeValue(latest)) return { ok: true, code: afCodeValue(latest), receivedAt: afCodeTime(latest) };
-    } catch { /* sem código ainda */ }
-  }
-  return { ok: false };
-}
-// Código de confirmação do e-mail usado (uma verificação por chamada).
-async function afCode(email, options = {}) {
-  const previousCode = String(options.previousCode || '').trim();
-  const requestedAt = Number(options.requestedAt || 0);
-  try {
-    const { latest } = await afApi('/api/flow/latest');
-    if (latest && afCodeValue(latest) && (!email || !latest.email || latest.email === email)) {
-      const code = afCodeValue(latest);
-      if (code !== previousCode && (!requestedAt || !afCodeTime(latest) || afCodeTime(latest) >= requestedAt)) {
-        return { ok: true, code };
-      }
-    }
-  } catch { /* tenta pela lista */ }
-  const flow = await afLista();
-  const hit = flow
-    .filter((g) => g.email === email && afCodeValue(g) && afCodeValue(g) !== previousCode)
-    .filter((g) => !requestedAt || !afCodeTime(g) || afCodeTime(g) >= requestedAt)
-    .sort((a, b) => afCodeTime(b) - afCodeTime(a))[0];
-  if (hit) return { ok: true, code: afCodeValue(hit) };
-  // pool normal (Gmail manual) — códigos que vão pra aba "Códigos"
-  if (email) {
-    try {
-      const { latest } = await afApi('/api/latest?email=' + encodeURIComponent(email));
-      if (latest && afCodeValue(latest)) {
-        const code = afCodeValue(latest);
-        if (code !== previousCode && (!requestedAt || !afCodeTime(latest) || afCodeTime(latest) >= requestedAt)) return { ok: true, code };
-      }
-    } catch { /* sem código ainda */ }
-  }
-  return { ok: false, waiting: true };
-}
-// Troca de Gmail (usuário/e-mail em uso): libera o atual de volta ao pool e pede
-// outro pelo claim (o servidor entrega um DIFERENTE, comprando se precisar).
-async function afNovoEmail(excludeEmail) {
-  afBuyTriggered = false;
-  if (excludeEmail) {
-    try { await afApi('/api/release', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: excludeEmail }) }); }
-    catch { /* segue mesmo sem liberar */ }
-  }
-  for (let i = 0; i < 40; i++) {
-    try {
-      const r = await afApi('/api/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client: AF_CLIENT }) });
-      if (r && r.ok && r.email && r.email !== excludeEmail) return { ok: true, email: r.email };
-    } catch { /* tenta de novo */ }
-    await new Promise((resolve) => setTimeout(resolve, 3000));
-  }
-  return { ok: false, error: 'o novo Gmail ainda não apareceu na API' };
 }

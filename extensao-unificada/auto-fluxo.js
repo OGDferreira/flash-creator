@@ -129,24 +129,22 @@
       } catch (e) { resolve({ ok: false, error: String(e && e.message || e) }); }
     });
   }
-  // Primeiro Gmail disponível; se não houver, o background compra e a gente espera.
+  // (API do Gmail removida) Espera VOCÊ digitar o e-mail/telefone no campo e usa
+  // o valor digitado. Não puxa mais nada do Flash Creator.
   async function gmailDisponivel() {
-    for (let i = 0; i < 25; i++) {
-      const r = await ask({ type: 'afEmail' });
-      if (r && r.ok && r.email) return r.email;
-      if (r && r.error) throw new Error(r.error);
-      await sleep(3000);
-    }
-    throw new Error('nenhum Gmail disponível na API');
+    const field = await waitFor(
+      () => { const f = emailField(); return f && String(f.value || '').trim() ? f : null; },
+      'você digitar o e-mail/telefone', 600000
+    );
+    return String(field.value).trim();
   }
-  // Código de confirmação do e-mail que usamos.
-  async function codigoDoEmail(email, previousCode = '', requestedAt = 0) {
-    for (let i = 0; i < 30; i++) {
-      const r = await ask({ type: 'afCode', email, previousCode, requestedAt });
-      if (r && r.ok && r.code) return r.code;
-      await sleep(3000);
-    }
-    throw new Error('código não chegou na API');
+  // (API do Gmail removida) Espera VOCÊ digitar o código no campo e usa o valor.
+  async function codigoDoEmail() {
+    const field = await waitFor(
+      () => { const f = codeField(); return f && String(f.value || '').trim() ? f : null; },
+      'você digitar o código de confirmação', 600000
+    );
+    return String(field.value).trim();
   }
 
   // ── Página de cadastro ──
@@ -164,11 +162,9 @@
     return /codigo de confirmacao inserido e invalido ou expirou|confirmation code.*invalid|code.*expired/i.test(clean(document.body?.innerText || ''));
   }
   async function restartAfterActivityRestriction() {
-    const oldEmail = S.email();
-    toast('info', 'Instagram restringiu esta atividade. Comprando outro Gmail e reiniciando…');
-    const next = await ask({ type: 'afNovoEmail', excludeEmail: oldEmail });
-    if (!next?.ok || !next.email) throw new Error(next?.error || 'não foi possível obter outro Gmail');
-    S.setEmail(next.email);
+    // Sem API de Gmail: reinicia o cadastro e você informa outro e-mail na tela.
+    toast('info', 'Instagram restringiu esta atividade. Reiniciando o cadastro — use outro e-mail.');
+    S.setEmail('');
     S.set('ir-cadastro');
     S.setStage('cadastro-aberto');
     location.href = 'https://www.instagram.com/accounts/emailsignup/';
@@ -288,14 +284,13 @@
 
   async function preencherEmail() {
     const field = await waitFor(emailField, 'o campo de email/celular', 10000);
-    if (stageAtLeast('email-preenchido') && field.value === S.email()) return;
-    // Sempre confirma com a API: um endereço salvo na sessão pode ter sido
-    // estornado depois do carregamento anterior da extensão.
+    if (stageAtLeast('email-preenchido') && String(field.value || '').trim()) return;
+    // Sem API: você digita o e-mail/telefone e o fluxo segue com o que você pôs.
+    if (!String(field.value || '').trim()) toast('info', 'Digite o e-mail/telefone — o fluxo continua sozinho.');
     const email = await gmailDisponivel();
     S.setEmail(email);
-    await typeInto(field, email);
     S.setStage('email-preenchido');
-    toast('info', 'Email preenchido: ' + email);
+    toast('info', 'E-mail detectado: ' + email);
   }
 
   async function acionarAVL() {
@@ -339,25 +334,14 @@
     return true;
   }
 
-  async function novoGmailECadastro() {
-    const oldEmail = S.email();
-    toast('info', 'Código inválido novamente. Comprando outro Gmail…');
-    const next = await ask({ type: 'afNovoEmail', excludeEmail: oldEmail });
-    if (!next?.ok || !next.email) throw new Error(next?.error || 'não foi possível obter outro Gmail');
-    S.setEmail(next.email);
-    S.set('ir-cadastro');
-    S.setStage('cadastro-aberto');
-    location.href = 'https://www.instagram.com/accounts/emailsignup/';
-  }
-
-  async function preencherCodigo(previousCode = '', requestedAt = 0) {
+  async function preencherCodigo() {
     const field = codeField();
     if (!field) return false; // ainda não é a tela de código
-    toast('info', 'Buscando o código na API…');
-    const code = await codigoDoEmail(S.email(), previousCode, requestedAt);
-    await typeInto(field, code);
+    // Sem API: você digita o código no campo; o fluxo clica em Continuar sozinho.
+    if (!String(field.value || '').trim()) toast('info', 'Digite o código de confirmação — eu clico em Continuar.');
+    const code = await codigoDoEmail();
     S.setStage('codigo-preenchido');
-    toast('info', 'Código preenchido: ' + code);
+    toast('info', 'Código detectado: ' + code);
     // O botão pode aparecer desabilitado por alguns instantes após a digitação.
     // Nunca considerar a etapa concluída sem confirmar que o clique aconteceu.
     await step('Clicar em Continuar', clickContinueOnce, 3);
@@ -368,23 +352,16 @@
       return 'restarted-after-restriction';
     }
     if (confirmationCodeInvalid()) {
-      toast('info', 'Código rejeitado. Aguardando uma nova leitura do Gmail…');
-      let retryCode;
-      try {
-        retryCode = await codigoDoEmail(S.email(), code, Date.now() - 1000);
-      } catch {
-        await novoGmailECadastro();
-        return 'restarted-with-new-email';
-      }
-      await typeInto(codeField() || field, retryCode);
+      // Sem API pra comprar outro Gmail: pede a correção manual e tenta de novo.
+      toast('erro', 'Código rejeitado ou expirado. Corrija o código no campo que eu clico em Continuar de novo.');
+      await waitFor(() => {
+        const f = codeField();
+        return f && String(f.value || '').trim() && String(f.value).trim() !== code && !confirmationCodeInvalid() ? f : null;
+      }, 'um novo código', 600000);
       S.setStage('codigo-preenchido');
       await step('Clicar em Continuar novamente', clickContinueOnce, 3);
       S.setStage('continuar-clicado');
       await sleep(3000);
-      if (confirmationCodeInvalid()) {
-        await novoGmailECadastro();
-        return 'restarted-with-new-email';
-      }
     }
     return true;
   }
@@ -396,9 +373,6 @@
 
     await step('Preencher email', preencherEmail);
     await step('Acionar AVL', acionarAVL);
-    const codeBaseline = await ask({ type: 'afCodeSnapshot', email: S.email() });
-    const codeBeforeSubmit = codeBaseline?.code || '';
-    const codeRequestedAt = Date.now();
     const submitResult = await step('Enviar cadastro', enviarCadastro);
     if (submitResult === 'restarted-after-restriction') return;
 
@@ -413,7 +387,7 @@
     for (let i = 0; i < 30; i++) {
       if (isActivityRestricted()) { await restartAfterActivityRestriction(); return; }
       if (codeField()) {
-        const codeResult = await step('Preencher código', () => preencherCodigo(codeBeforeSubmit, codeRequestedAt));
+        const codeResult = await step('Preencher código', () => preencherCodigo());
         if (codeResult === 'restarted-with-new-email') return;
         break;
       }
