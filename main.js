@@ -593,17 +593,39 @@ function wireIpc() {
       if (!singleProxy.password) return { error: 'A proxy está sem senha. Preencha a senha das proxies Allan na aba Proxies.' }
       const allan = new AllanClient(c.allan_key, c.allan_base)
       const wait = Math.max(Number(opts.rotateWait) || 8, 2)
+      // Lê o IP de saída atual da proxy (endpoint /teste). Usado pra PROVAR que a
+      // rotação funcionou — sem isso a gente só torcia pra ter mudado.
+      const lerIp = async () => {
+        try { const r = await allan.teste(singleProxy.login); return (r && (r.ip || r.endereco || r.ipAtual || r.ip_saida)) || null }
+        catch { return null }
+      }
+      let lastIp = null
       rotateBefore = async (i) => {
-        if (i === 0) { log('info', `Perfil 1 usa o IP atual da proxy ${singleProxy.login}.`); return }
-        log('step', `Rotacionando IP de ${singleProxy.login} antes do perfil ${i + 1}...`)
-        try { await allan.config(singleProxy.login, singleProxy.pais ? { pais: singleProxy.pais } : {}) }
-        catch (e) {
-          if (e.status === 403) throw new Error('a chave da Allan é só de leitura — gere uma chave com permissão de configuração')
-          if (e.status === 409) throw new Error('esta proxy não aceita troca de IP por API')
-          throw e
+        if (i === 0) {
+          lastIp = await lerIp()
+          log('info', `Perfil 1 usa o IP atual da proxy ${singleProxy.login}${lastIp ? ` (${lastIp})` : ''}.`)
+          return
         }
-        log('ok', `IP rotacionado. Esperando ${wait}s pro novo IP entrar...`)
-        await new Promise((r) => setTimeout(r, wait * 1000))
+        log('step', `Rotacionando IP de ${singleProxy.login} antes do perfil ${i + 1}...`)
+        let novoIp = null
+        for (let tent = 1; tent <= 3; tent++) {
+          try { await allan.config(singleProxy.login, singleProxy.pais ? { pais: singleProxy.pais } : {}) }
+          catch (e) {
+            if (e.status === 403) throw new Error('a chave da Allan é só de leitura — gere uma chave com permissão de configuração')
+            if (e.status === 409) throw new Error('esta proxy não aceita troca de IP por API')
+            throw e
+          }
+          await new Promise((r) => setTimeout(r, wait * 1000))
+          novoIp = await lerIp()
+          // Sem IP legível (ou sem baseline) não dá pra comparar: aceita e segue.
+          if (!lastIp || !novoIp || novoIp !== lastIp) break
+          log('warn', `IP continua ${novoIp} após rotacionar (tentativa ${tent}/3). Tentando de novo...`)
+        }
+        if (lastIp && novoIp && novoIp === lastIp) {
+          throw new Error(`o IP NÃO mudou (${novoIp}) após 3 tentativas — esta proxy 4G pode não rotacionar por API, ou precisa de outro parâmetro`)
+        }
+        log('ok', `IP rotacionado: ${lastIp || '?'} → ${novoIp || '?'}.`)
+        lastIp = novoIp || lastIp
       }
     }
 
