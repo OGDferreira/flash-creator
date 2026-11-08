@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "extensionsIG.avl",
-  "version": "1.67",
-  "description": "v1.67: destaque novo (fluxo de tela) só roda na página do perfil DEPOIS de conectar a conta no Flashpost; removido o destaque antigo via API. Flashpost abre sozinho após o cadastro e conecta UMA vez (sem loop); botão pra abrir o Flashpost; sem API de Gmail; suspenso desloga e recomeça. Botões não se sobrepõem.",
+  "version": "1.68",
+  "description": "v1.68: extensão única (destaque embutido). Destaque só clica na página do perfil DEPOIS de conectar a conta no Flashpost. Flashpost conecta UMA vez por conta e não reconecta (guard persistente, sem loop). Botões Flashpost e destaque sem sobreposição. Sem API de Gmail; suspenso desloga e recomeça.",
   "permissions": [
     "cookies",
     "storage",

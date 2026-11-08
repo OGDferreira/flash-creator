@@ -122,8 +122,13 @@
       // Conta nova (aberta pela extensão com novo afrun): zera o guard e conecta de novo.
       if (runId && runId !== st.lastRun) { setFp({ lastRun: runId, conectarAt: 0, done: false }); st = fpState(); }
 
-      // Já conectou há pouco (ex.: voltou do OAuth): NÃO repete o fluxo. Só confirma
-      // "Permitir" se essa tela estiver aqui e então para de vez.
+      // Já conectou ESTA conta: conecta UMA vez só. Não reloga, não reclica
+      // "Conectar conta", nem depois do cooldown. Só uma conta nova (novo #afrun,
+      // tratado acima) libera conectar de novo. Mata o loop de ficar reconectando.
+      if (st.done) { stopFlow(); return; }
+
+      // Já clicou "Conectar" há pouco (ex.: voltou do OAuth): NÃO repete o fluxo.
+      // Só confirma "Permitir" se essa tela estiver aqui e então para de vez.
       if (st.conectarAt && (now - st.conectarAt < COOLDOWN_MS)) {
         const permitir0 = findButton(PERMITIR);
         if (permitir0) { permitir0.click(); permitirFeito = true; setFp({ done: true }); notice('Permissão confirmada.'); }
@@ -160,11 +165,18 @@
       if (conectar && !conectarFeito) {
         conectar.click();
         conectarFeito = true;
-        setFp({ conectarAt: Date.now() });
+        // Marca done=true JÁ no clique: conectar é ação de uma vez só por conta.
+        // Mesmo que o OAuth volte pra cá, o guard do topo (st.done) impede reclique.
+        setFp({ conectarAt: Date.now(), done: true });
         // Libera o destaque: só depois de conectar no Flashpost a extensão tenta
         // criar o destaque quando o usuário voltar pra página do perfil no IG.
         try { chrome.storage.local.set({ itm_destaque_liberado: Date.now() }); } catch (_) { /* ok */ }
         notice('Conectar conta acionado.');
+        // Tenta confirmar "Permitir" se aparecer aqui, mas não reconecta mais.
+        const permitirApos = await waitFor(() => findButton(PERMITIR), 20000);
+        if (permitirApos) { permitirApos.click(); permitirFeito = true; notice('Permissão confirmada.'); }
+        stopFlow();
+        return;
       }
 
       // 3) Após Conectar conta, pode aparecer a tela de autorização ("Permitir").
