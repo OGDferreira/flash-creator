@@ -104,6 +104,36 @@ class LocalServer {
       return
     }
 
+    // A extensão pede 1 Gmail livre: o servidor marca "em uso" e devolve.
+    // Pedidos simultâneos recebem Gmails diferentes (nunca o mesmo).
+    if (req.method === 'POST' && url.pathname === '/api/claim') {
+      let raw = ''
+      req.on('data', (d) => { raw += d; if (raw.length > 4096) req.destroy() })
+      req.on('end', async () => {
+        let body = {}
+        try { body = raw ? JSON.parse(raw) : {} } catch { body = {} }
+        const clientId = body.client || url.searchParams.get('client') || ''
+        if (!this.provider.claim) return this._send(res, 501, { error: 'claim indisponível' })
+        try { return this._send(res, 200, await this.provider.claim(clientId)) }
+        catch (e) { return this._send(res, 500, { error: e.message }) }
+      })
+      return
+    }
+    // A extensão libera um Gmail que reservou mas não vai usar (cadastro abortado).
+    if (req.method === 'POST' && url.pathname === '/api/release') {
+      let raw = ''
+      req.on('data', (d) => { raw += d; if (raw.length > 4096) req.destroy() })
+      req.on('end', () => {
+        let body = {}
+        try { body = raw ? JSON.parse(raw) : {} } catch { body = {} }
+        const email = body.email || url.searchParams.get('email') || ''
+        if (!this.provider.release) return this._send(res, 501, { error: 'release indisponível' })
+        try { return this._send(res, 200, this.provider.release(email)) }
+        catch (e) { return this._send(res, 500, { error: e.message }) }
+      })
+      return
+    }
+
     try {
       if (url.pathname === '/api/available') return this._send(res, 200, { available: this.provider.available() })
       if (url.pathname === '/api/accounts') return this._send(res, 200, { accounts: this.provider.accounts() })

@@ -4,6 +4,7 @@ let codes = []
 let cfg = { code_limit: 6, window_days: 4 }
 let selEmail = null
 let cycleUsed = new Set()
+let leasedEmails = new Set() // Gmails entregues pela API e "em uso" (aguardando código)
 
 // Sessões de navegador (aba Contas)
 let sessions = []
@@ -77,6 +78,11 @@ async function init() {
     renderFlowOrders()
     if (order && order.lastCode) toast(`Código ${order.lastCode} recebido (${order.email || 'Gmail'})!`, 'ok')
   })
+  window.api.onLeasesUpdate((emails) => {
+    leasedEmails = new Set(emails || [])
+    renderCards()
+    renderFlowOrders()
+  })
 
   await loadConfigIntoForm()
   await loadServerInfo()
@@ -115,8 +121,11 @@ function renderCards() {
       : '<div class="code-wait">📬 Aguardando código...</div>'
     const hist = history.map((c) => `<div class="hist-item"><span class="hist-num">${esc(c.code)}</span><span class="hist-from">${esc(c.sender || c.subject || '—')}</span><span class="hist-time">${esc((c.received_at || '').split(' ')[1] || c.received_at)}</span><button class="btn ghost sm" data-act="copy" data-val="${esc(c.code)}">Copiar</button></div>`).join('')
     const manualCls = acc.manual ? ' manual' : ''
-    const tag = acc.status === 'green' ? '<span class="status-tag green">disponível</span>' : '<span class="status-tag red">indisponível</span>'
-    return `<div class="gmail-card ${acc.status}${isActive ? ' active' : ''}" data-act="select" data-email="${esc(acc.email)}">
+    const inUse = leasedEmails.has(acc.email)
+    const tag = inUse
+      ? '<span class="status-tag inuse">em uso</span>'
+      : (acc.status === 'green' ? '<span class="status-tag green">disponível</span>' : '<span class="status-tag red">indisponível</span>')
+    return `<div class="gmail-card ${acc.status}${inUse ? ' inuse' : ''}${isActive ? ' active' : ''}" data-act="select" data-email="${esc(acc.email)}">
       <div class="card-top">
         <span class="status-dot ${acc.status}${manualCls}" data-act="cycle" data-email="${esc(acc.email)}" title="Clique para fixar/soltar a cor (${acc.manual ? 'manual' : 'automático'})"></span>
         <span class="card-email" data-act="copy" data-val="${esc(acc.email)}" title="Copiar Gmail">${esc(acc.email)}</span>
@@ -688,12 +697,14 @@ function renderFlowOrders() {
       ? `<span class="hist-num" data-act="copy" data-val="${esc(o.lastCode)}" title="Copiar código" style="cursor:pointer;font-size:16px">${esc(o.lastCode)}</span>`
       : (o.closed ? '<span class="muted">sem código</span>' : '<span class="muted">⏳ aguardando...</span>')
     const q = o.code_quota ? `<span class="muted"> · ${o.code_quota.used || 0}/${o.code_quota.limit || 3} em 24h</span>` : ''
-    const statusCls = o.lastCode ? 'free' : (o.closed ? 'used' : '')
+    const inUse = o.email && leasedEmails.has(o.email)
+    const statusCls = inUse ? 'inuse' : (o.lastCode ? 'free' : (o.closed ? 'used' : ''))
+    const statusTxt = inUse ? 'em uso' : (FLOW_STATUS_PT[o.status] || o.status || '')
     const actions = o.lastCode ? `<button class="btn ghost sm" data-act="copy" data-val="${esc(o.lastCode)}">Copiar código</button>` : ''
     return `<div class="made-row" style="align-items:center">
       <span class="col-grow">${email}${q}</span>
       <span style="width:130px">${code}</span>
-      <span style="width:110px"><span class="pill ${statusCls}">${esc(FLOW_STATUS_PT[o.status] || o.status || '')}</span></span>
+      <span style="width:110px"><span class="pill ${statusCls}">${esc(statusTxt)}</span></span>
       <span style="width:160px;text-align:right">${actions}</span>
     </div>`
   }).join('')

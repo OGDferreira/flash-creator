@@ -76,5 +76,6 @@ contextBridge.exposeInMainWorld('api', {
   onProgress: (cb) => ipcRenderer.on('dolphin-progress', (_, e) => cb(e)),
   onProfileOpened: (cb) => ipcRenderer.on('profile-opened', (_, e) => cb(e)),
   onSmsUpdate: (cb) => ipcRenderer.on('sms-update', (_, order) => cb(order)),
-  onFlowUpdate: (cb) => ipcRenderer.on('flow-update', (_, order) => cb(order))
+  onFlowUpdate: (cb) => ipcRenderer.on('flow-update', (_, order) => cb(order)),
+  onLeasesUpdate: (cb) => ipcRenderer.on('leases-update', (_, emails) => cb(emails))
 })

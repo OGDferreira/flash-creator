@@ -90,6 +90,9 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .status-tag { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px; text-transform: uppercase; }
 .status-tag.green { background: rgba(47,211,138,.15); color: var(--green); }
 .status-tag.red { background: rgba(255,93,108,.15); color: var(--red); }
+.status-tag.inuse { background: rgba(255,176,32,.18); color: #ffb020; }
+.gmail-card.inuse { border-left-color: #ffb020; }
+.pill.inuse { background: rgba(255,176,32,.18); color: #ffb020; }
 .code-area { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px; text-align: center; margin-bottom: 10px; }
 .code-num { font-size: 32px; font-weight: 800; letter-spacing: 3px; font-family: var(--mono); cursor: pointer; }
 .code-num:hover { color: var(--accent); }

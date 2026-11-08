@@ -92,11 +92,11 @@ function isMobile4g(p) { return (p.category || detectCategory(p.plano)) === 'mob
 const serverProvider = {
   available() {
     const now = Date.now()
-    return data.accounts.filter((a) => statusOf(a, now).color === 'green').map((a) => ({ email: a.email, count: a.count || 0 }))
+    return data.accounts.filter((a) => statusOf(a, now).color === 'green').map((a) => ({ email: a.email, count: a.count || 0, in_use: isLeased(a.email) }))
   },
   accounts() {
     const now = Date.now()
-    return data.accounts.map((a) => { const s = statusOf(a, now); return { email: a.email, status: s.color, manual: s.manual, count: a.count || 0, recent: s.recent } })
+    return data.accounts.map((a) => { const s = statusOf(a, now); return { email: a.email, status: s.color, manual: s.manual, count: a.count || 0, recent: s.recent, in_use: isLeased(a.email) } })
   },
   codesFor(email) { return (email ? data.codes.filter((c) => c.email === email) : data.codes).slice(0, 100) },
   latestFor(email) { return latestFor(email) },
@@ -122,7 +122,8 @@ const serverProvider = {
           order_id: o.order_id || o.intentId, email: o.email, service_id: o.service_id || '', status: o.status || '',
           code: o.lastCode || null, next_action: o.next_action || '',
           quota_used: q ? (q.used || 0) : null, quota_limit: q ? (q.limit || 3) : null, quota_remaining: remaining,
-          exhausted: remaining === 0 // sem código disponível nesta janela de 24h
+          exhausted: remaining === 0, // sem código disponível nesta janela de 24h
+          in_use: isLeased(o.email) // reservado por um pedido da API até chegar o código
         }
       })
   },
@@ -130,12 +131,88 @@ const serverProvider = {
     const o = data.flowOrders.find((x) => x.lastCode)
     return o ? { order_id: o.order_id || o.intentId, email: o.email || '', code: o.lastCode, service_id: o.service_id || '', received_at: o.savedAt || '' } : null
   },
+  // A extensão pede 1 Gmail: pega um livre e o marca "em uso" (ver leases).
+  claim(clientId) { return claimEmail(clientId) },
+  // A extensão pode liberar um Gmail que reservou mas não vai mais usar.
+  release(email) { releaseLease(email); return { ok: true } },
   // A extensão pode pedir pra comprar outro Gmail (ex.: quando a cota do atual zera).
   flowBuy(opts) { return doFlowBuy(opts) }
 }
 
 const server = new LocalServer(serverProvider, log)
 function startServer() { server.start({ port: data.config.server_port, token: data.config.server_token, enabled: data.config.server_enabled }) }
+
+// ------------------------------------------------------- Gmail "em uso" (lease)
+// Um Gmail entregue pela API (POST /api/claim) fica RESERVADO até receber o
+// código dele. Assim, 2/3/4 pedidos simultâneos (vários perfis/pessoas) pegam
+// Gmails DIFERENTES, nunca o mesmo. Preferência: Gmail normal (cadastrado à mão)
+// primeiro; sem nenhum livre, compra na FlowOTP (e compra mais se a demanda
+// concorrente exigir). Ao chegar o código, o app envia e LIBERA o Gmail.
+const LEASE_TTL_MS = 10 * 60 * 1000  // 10 min sem código => solta sozinho (cadastro travou)
+const WAITER_TTL_MS = 12 * 1000      // janela p/ medir a demanda concorrente
+const BUY_COOLDOWN_MS = 2500         // intervalo mínimo entre compras automáticas
+const leases = new Map()             // email -> { id, at, source }
+const waiters = new Map()            // clientId -> timestamp (pedidos aguardando Gmail)
+let lastAutoBuyAt = 0
+
+function isLeased(email) { return Boolean(email) && leases.has(email) }
+function leasedList() { return Array.from(leases.keys()) }
+function emitLeases() { try { mainWindow && mainWindow.webContents.send('leases-update', leasedList()) } catch { /* ignore */ } }
+function pushAvail() { try { server.pushAvailable(); server.pushFlowAvailable() } catch { /* ignore */ } }
+
+function pruneLeases() {
+  const now = Date.now()
+  for (const [email, l] of leases) if (now - l.at > LEASE_TTL_MS) leases.delete(email)
+  for (const [id, at] of waiters) if (now - at > WAITER_TTL_MS) waiters.delete(id)
+}
+
+// Libera um Gmail reservado (chamado quando o código dele chega, ou manualmente).
+function releaseLease(email) {
+  if (email && leases.delete(email)) { pushAvail(); emitLeases(); log('info', `Gmail ${email} liberado (voltou a ficar disponível).`) }
+}
+
+// Gmails livres, na ordem de preferência: normais (cadastrados à mão) e verdes,
+// depois comprados (FlowOTP) com código ainda disponível. Exclui os já em uso.
+function freeManual() {
+  const now = Date.now()
+  return data.accounts.filter((a) => statusOf(a, now).color === 'green' && !isLeased(a.email)).map((a) => a.email)
+}
+function freeFlow() {
+  return serverProvider.flowActive().filter((g) => g.email && !g.exhausted && !isLeased(g.email)).map((g) => g.email)
+}
+
+// Entrega 1 Gmail livre e o marca "em uso" na hora (atômico: o Node roda este
+// trecho sem ser interrompido, então dois pedidos simultâneos pegam e-mails
+// diferentes). Sem nenhum livre: dispara compra conforme a demanda e pede espera.
+function claimEmail(clientId) {
+  pruneLeases()
+  const manual = freeManual()
+  const email = manual[0] || freeFlow()[0]
+  if (email) {
+    const source = manual.includes(email) ? 'manual' : 'flow'
+    leases.set(email, { id: clientId || ('c-' + Date.now()), at: Date.now(), source })
+    waiters.delete(clientId)
+    pushAvail(); emitLeases()
+    log('ok', `Gmail ${email} entregue à API e marcado "em uso".`)
+    return { ok: true, email, source }
+  }
+  maybeAutoBuy(clientId)
+  return { ok: false, waiting: true }
+}
+
+// Compra Gmail(s) quando o pool está vazio, na medida da demanda concorrente:
+// nº de pedidos aguardando (waiters) menos os que já estão sendo preparados.
+function maybeAutoBuy(clientId) {
+  const now = Date.now()
+  if (clientId) waiters.set(clientId, now)
+  if (!flowKey()) return // sem chave da FlowOTP não dá pra comprar; fica só no pool normal
+  const demanda = Math.max(waiters.size, 1)
+  const emPreparo = data.flowOrders.filter((o) => !o.closed && !['refunded', 'failed'].includes(o.status) && !o.lastCode && !isLeased(o.email)).length
+  if (demanda - emPreparo <= 0) return       // já tem Gmail suficiente a caminho
+  if (now - lastAutoBuyAt < BUY_COOLDOWN_MS) return // não dispara compras em rajada
+  lastAutoBuyAt = now
+  doFlowBuy({}).then((r) => { if (r && r.error) log('warn', `Compra automática de Gmail: ${r.error}`) }).catch(() => {})
+}
 
 // ------------------------------------------------------------ códigos
 function saveCode(email, code, subject, sender) {
@@ -152,6 +229,7 @@ function saveCode(email, code, subject, sender) {
   // extensão: push do código + lista de disponíveis (o status pode ter virado vermelho)
   server.pushCode(email, code, { subject: entry.subject, sender: entry.sender, received_at: entry.received_at })
   server.pushAvailable()
+  releaseLease(email) // chegou o código deste Gmail: libera a reserva "em uso"
   return true
 }
 
@@ -303,6 +381,7 @@ function upsertFlowOrder(apiOrder, intentRef) {
   try {
     for (const code of fresh) server.pushFlow({ email: merged.email, code, service_id: merged.service_id, order_id: merged.order_id })
     server.pushFlowAvailable()
+    if (fresh.length) releaseLease(merged.email) // chegou código: libera a reserva "em uso"
   } catch { /* ignore */ }
   if (fresh.length) log('ok', `FlowOTP: código ${fresh[fresh.length - 1]} recebido em ${merged.email || merged.order_id}.`)
   return merged

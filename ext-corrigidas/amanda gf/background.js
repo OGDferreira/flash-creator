@@ -947,36 +947,47 @@ void abrirCadastro();
 // sem pop-up. Cada chamada é curta (uma verificação); o content script repete.
 const AF_BASE = 'http://127.0.0.1:8777';
 const AF_TOKEN = 'a998ba0720f3d5a960874e7099cef74b';
-let afBuyTriggered = false;
+// Id único deste perfil/extensão: o servidor usa pra medir quantos pedidos
+// simultâneos existem e comprar Gmail na medida da demanda.
+const AF_CLIENT = 'c-' + Math.random().toString(36).slice(2, 10);
 async function afApi(path, opts) {
   const sep = path.includes('?') ? '&' : '?';
   const r = await fetch(AF_BASE + path + sep + 'token=' + AF_TOKEN, opts);
   if (!r.ok) throw new Error('API ' + r.status);
   return r.json();
 }
-async function afLista() {
-  try { const { flow } = await afApi('/api/flow'); return flow || []; }
-  catch { return []; }
-}
-// Devolve um Gmail disponível; na 1ª vez sem nenhum, dispara 1 compra.
+// Pede 1 Gmail ao servidor. O SERVIDOR escolhe e marca "em uso" na hora, então
+// pedidos simultâneos (vários perfis) recebem Gmails diferentes — nunca o mesmo.
+// Sem Gmail livre, o servidor compra sozinho e devolve waiting (o content script
+// repete). Guarda o e-mail entregue pra buscar o código certo depois.
+let afEmailAtual = '';
 async function afEmail() {
-  let ativos = (await afLista()).filter((g) => g.email && !g.exhausted);
-  if (ativos.length) return { ok: true, email: ativos[0].email };
-  if (!afBuyTriggered) {
-    afBuyTriggered = true;
-    try { await afApi('/api/flow/buy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); }
-    catch (e) { return { ok: false, error: 'compra de Gmail falhou: ' + e.message }; }
-  }
-  return { ok: false, waiting: true };
+  try {
+    const r = await afApi('/api/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client: AF_CLIENT }) });
+    if (r && r.ok && r.email) { afEmailAtual = r.email; return { ok: true, email: r.email }; }
+    return { ok: false, waiting: true };
+  } catch (e) { return { ok: false, error: 'pedido de Gmail falhou: ' + e.message }; }
 }
-// Código de confirmação do e-mail usado (uma verificação por chamada).
+// Código de confirmação do Gmail usado. Procura nos dois pools: comprado
+// (FlowOTP) e normal (cadastrado à mão). Ao chegar, o servidor libera o Gmail.
 async function afCode(email) {
+  const alvo = email || afEmailAtual;
+  // comprado (FlowOTP)
   try {
     const { latest } = await afApi('/api/flow/latest');
-    if (latest && latest.code && (!email || !latest.email || latest.email === email)) return { ok: true, code: String(latest.code) };
-  } catch { /* tenta pela lista */ }
-  const flow = await afLista();
-  const hit = flow.find((g) => g.email === email && g.code);
-  if (hit && hit.code) return { ok: true, code: String(hit.code) };
+    if (latest && latest.code && (!alvo || !latest.email || latest.email === alvo)) return { ok: true, code: String(latest.code) };
+  } catch { /* segue */ }
+  try {
+    const { flow } = await afApi('/api/flow');
+    const hit = (flow || []).find((g) => g.email === alvo && g.code);
+    if (hit && hit.code) return { ok: true, code: String(hit.code) };
+  } catch { /* segue */ }
+  // normal (manual) — códigos que vão pra aba "Códigos"
+  if (alvo) {
+    try {
+      const { latest } = await afApi('/api/latest?email=' + encodeURIComponent(alvo));
+      if (latest && latest.code) return { ok: true, code: String(latest.code) };
+    } catch { /* segue */ }
+  }
   return { ok: false, waiting: true };
 }
