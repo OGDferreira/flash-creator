@@ -481,16 +481,9 @@
 
     if (isSignup()) { S.set('cadastro'); await fluxoCadastro(); return; }
 
-    // Cadastro concluído: não mexe no perfil (nada de arquivamento/edição).
-    // Só abre o Flashpost UMA vez, automaticamente, pra dar continuidade ao fluxo
-    // (conectar a conta recém-criada). Depois disso, deixa o usuário usar.
+    // Cadastro concluído: não mexe no perfil e NÃO abre o Flashpost sozinho.
+    // O Flashpost só abre quando o usuário clicar no botão "🔗 Flashpost".
     if (S.get() === 'ir-perfil') {
-      try {
-        if (sessionStorage.getItem('itm_af_flashpost_aberto') !== '1') {
-          sessionStorage.setItem('itm_af_flashpost_aberto', '1');
-          chrome.runtime.sendMessage({ type: 'afOpenFlashpost' });
-        }
-      } catch { /* ok */ }
       return;
     }
 

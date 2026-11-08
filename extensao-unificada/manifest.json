@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "extensionsIG.avl",
-  "version": "1.69",
-  "description": "v1.69: ao digitar/colar o e-mail, injeta +<aleatório> antes do @ (ex.: exemplo+1234c4@gmail.com) e só então envia. Extensão única (destaque embutido). Destaque só clica na página do perfil DEPOIS de conectar a conta no Flashpost. Flashpost conecta UMA vez por conta e não reconecta (sem loop). Botões Flashpost e destaque sem sobreposição. Sem API de Gmail; suspenso desloga e recomeça.",
+  "version": "1.70",
+  "description": "v1.70: Flashpost NÃO abre mais sozinho (nem pós-cadastro nem pós-conversão); só abre no clique do botão 🔗 Flashpost — fim do monte de guias. Mantém: +<aleatório> no e-mail antes de enviar; extensão única com destaque embutido travado no perfil pós-conexão; Flashpost conecta 1x por conta; botões sem sobreposição; sem API de Gmail; suspenso desloga e recomeça.",
   "permissions": [
     "cookies",
     "storage",

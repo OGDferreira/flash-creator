@@ -1372,11 +1372,9 @@
       'o botão “Continuar”',
     );
     continueButton.click();
-    // A conversão terminou. O próximo passo é o Flashpost em uma nova guia;
-    // o background abre/reutiliza a guia e o fluxo-login preenche, conecta e
-    // confirma a permissão.
+    // A conversão terminou. NÃO abre o Flashpost sozinho — isso enchia a tela de
+    // guias. O Flashpost só abre quando o usuário clicar no botão "🔗 Flashpost".
     await new Promise(resolve => setTimeout(resolve, 900));
-    await ask({ type: 'openFlashpostLogin' });
     sessionStorage.removeItem(PROFESSIONAL_FLOW_KEY);
     await new Promise(resolve => setTimeout(resolve, 1200));
     location.assign(sessionStorage.getItem('extensionsIG.avl.returnProfile') || 'https://www.instagram.com/');
