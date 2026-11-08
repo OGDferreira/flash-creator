@@ -425,9 +425,16 @@
   async function main() {
     if (isActivityRestricted()) { await restartAfterActivityRestriction(); return; }
     if (isSuspended()) {
-      toast('err', 'Instagram informou que a conta está suspensa. Fechando esta aba…');
-      await sleep(700);
-      try { chrome.runtime.sendMessage({ type: 'afCloseSuspendedTab' }); } catch { /* aba pode já estar fechando */ }
+      toast('err', 'Conta suspensa. Saindo da conta (apagando cookies) e recomeçando…');
+      // Zera os checkpoints do fluxo pra conta nova começar do zero.
+      try { sessionStorage.clear(); } catch { /* ok */ }
+      await sleep(500);
+      // O background apaga os cookies do Instagram (desloga) e manda esta aba
+      // de volta pro cadastro. Fallback: se não voltar, fecha a aba.
+      try {
+        const r = await new Promise((resolve) => { try { chrome.runtime.sendMessage({ type: 'afLogoutAndRestart' }, (resp) => resolve(chrome.runtime.lastError ? null : resp)); } catch { resolve(null); } });
+        if (!r || !r.ok) { try { chrome.runtime.sendMessage({ type: 'afCloseSuspendedTab' }); } catch { /* ok */ } }
+      } catch { /* aba pode já estar navegando */ }
       return;
     }
     if (isConsent()) { await fluxoConsent(); return; }

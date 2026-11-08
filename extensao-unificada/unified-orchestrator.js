@@ -102,29 +102,12 @@
 
   async function run() {
     if (!isInstagram()) return;
-    addPauseButton();
+    // Auto-config pós-cadastro DESLIGADO (pedido do Guilherme): a extensão NÃO
+    // força mais ir pra arquivamento nem pra "Editar perfil". Depois do cadastro
+    // o usuário fica livre pra usar a conta — se ele sair da página, fica quieta.
+    // Mantém só o clique de "Permitir" do Flashpost quando a tela de consentimento
+    // aparece (não navega pra lugar nenhum).
     clickInstagramPermission();
-    if (paused()) return;
-    if (signupDone() && stage() === 'awaiting-home') {
-      saveStage('archive-running');
-      location.replace(ARCHIVE_URL);
-      return;
-    }
-    if (stage() === 'archive-running' && !isArchive()) { location.replace(ARCHIVE_URL); return; }
-    if (stage() === 'profile-running' && !isEdit()) { location.replace(EDIT_URL); return; }
-    if (isArchive() && stage() === 'archive-running') {
-      await enableArchive();
-      saveStage('profile-running');
-      location.replace(EDIT_URL);
-      return;
-    }
-    if (isEdit() && stage() === 'profile-running' && !isAlreadyTriggered()) {
-      const button = await waitForButton();
-      if (!button) { toast('Botão Configurar perfil não encontrado.', true); return; }
-      sessionStorage.setItem(TRIGGERED_KEY, '1');
-      button.click();
-      toast('Botão Configurar perfil acionado. A extensão story-pronto continuará o fluxo.');
-    }
   }
   const kick = () => run().catch(error => toast(String(error?.message || error), true));
   setTimeout(kick, 1200);

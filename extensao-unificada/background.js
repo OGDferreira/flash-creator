@@ -909,6 +909,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       try { await chrome.tabs.remove(tabId); return { ok: true }; }
       catch (e) { return { ok: false, error: String(e?.message || e) }; }
     },
+    afLogoutAndRestart: () => afLogoutAndRestart(sender),
     preparePost: () => handlePreparePost(),
     uploadLive: () => handleUploadLive(msg.uploadId),
     configureLive: () => handleConfigureLive(msg.candidates),
@@ -990,4 +991,37 @@ async function afNotifySuspended(payload = {}) {
       socket.onerror = () => { clearTimeout(timer); finish({ ok: false, error: 'Falha no canal do Flash Creator.' }); };
     } catch (e) { clearTimeout(timer); finish({ ok: false, error: String(e?.message || e) }); }
   });
+}
+
+// Apaga TODOS os cookies do Instagram (desloga a conta deste perfil).
+async function afClearInstagramCookies() {
+  const domains = ['instagram.com', '.instagram.com', 'www.instagram.com', 'i.instagram.com'];
+  const seen = new Set();
+  let removed = 0;
+  for (const domain of domains) {
+    let cookies = [];
+    try { cookies = await chrome.cookies.getAll({ domain }); } catch { continue; }
+    for (const c of cookies) {
+      const key = c.name + '@' + c.domain + c.path;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const host = String(c.domain || '').replace(/^\./, '');
+      if (!host) continue;
+      const url = (c.secure ? 'https://' : 'http://') + host + (c.path || '/');
+      try { await chrome.cookies.remove({ url, name: c.name, storeId: c.storeId }); removed++; } catch { /* segue */ }
+    }
+  }
+  return removed;
+}
+
+// Em caso de conta suspensa: desloga (apaga cookies do Instagram) e manda a MESMA
+// aba de volta pro começo (cadastro), pra recomeçar com uma conta nova.
+async function afLogoutAndRestart(sender) {
+  const tabId = sender?.tab?.id;
+  await afNotifySuspended({ tabId, url: sender?.url || sender?.tab?.url || '' });
+  const removed = await afClearInstagramCookies();
+  try {
+    if (Number.isInteger(tabId)) await chrome.tabs.update(tabId, { url: 'https://www.instagram.com/accounts/emailsignup/' });
+    return { ok: true, removed };
+  } catch (e) { return { ok: false, error: String(e?.message || e), removed }; }
 }
