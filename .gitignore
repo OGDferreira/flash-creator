@@ -1,0 +1,12 @@
+# dependências e builds
+node_modules/
+dist/
+package-lock.json
+
+# dados locais do app (tokens, contas, pedidos) — nunca versionar
+data.json
+*.log
+
+# lixo de SO
+.DS_Store
+Thumbs.db

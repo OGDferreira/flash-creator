@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<style>
+  body { width: 320px; margin: 0; font-family: "Segoe UI", sans-serif; background: #0e1016; color: #e8eaf2; font-size: 13px; }
+  header { padding: 12px 14px; border-bottom: 1px solid #272d3f; }
+  header b { font-size: 14px; }
+  .cfg { padding: 10px 14px; border-bottom: 1px solid #272d3f; display: flex; flex-direction: column; gap: 6px; }
+  .cfg input { background: #191d28; border: 1px solid #272d3f; color: #e8eaf2; padding: 7px 9px; border-radius: 7px; font-size: 12px; }
+  .cfg button { background: #7c5cff; border: none; color: #fff; padding: 7px; border-radius: 7px; cursor: pointer; font-weight: 600; }
+  .sec { padding: 10px 14px; } .sec h4 { font-size: 11px; color: #8b91a7; margin: 0 0 6px; text-transform: uppercase; }
+  .row { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #2fd38a; }
+  .email { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .code { font-family: Consolas, monospace; font-weight: 700; color: #7c5cff; }
+  .muted { color: #8b91a7; font-size: 11px; }
+</style>
+</head>
+<body>
+  <header><b>⚡ Flash Creator</b></header>
+  <div class="cfg">
+    <input id="base" placeholder="http://127.0.0.1:8777" />
+    <input id="token" placeholder="Token (aba API do app)" />
+    <button id="save">Salvar e conectar</button>
+    <span class="muted" id="status">—</span>
+  </div>
+  <div class="sec"><h4>Gmails disponíveis</h4><div id="available"></div></div>
+  <div class="sec"><h4>Últimos códigos</h4><div id="codes"></div></div>
+  <script src="popup.js"></script>
+</body>
+</html>

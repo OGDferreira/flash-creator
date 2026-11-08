@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'" />
+<title>Flash Creator</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-logo">⚡</div>
+      <div class="brand-text"><b>Flash Creator</b><span>Gmail + Dolphin Anty</span></div>
+    </div>
+    <div class="nav-label">MENU</div>
+    <button class="nav-btn active" id="nav-codes" onclick="switchTab('codes')">📨 Códigos</button>
+    <button class="nav-btn" id="nav-accounts" onclick="switchTab('accounts')">👤 Contas Gmail</button>
+    <button class="nav-btn" id="nav-dolphin" onclick="switchTab('dolphin')">⚡ Perfis Dolphin</button>
+    <button class="nav-btn" id="nav-proxies" onclick="switchTab('proxies')">⇄ Proxies</button>
+    <button class="nav-btn" id="nav-sms" onclick="switchTab('sms')">📱 Números SMS</button>
+    <button class="nav-btn" id="nav-flow" onclick="switchTab('flow')">📧 Gmail comprados</button>
+    <button class="nav-btn" id="nav-api" onclick="switchTab('api')">🔌 API / Extensão</button>
+    <button class="nav-btn" id="nav-settings" onclick="switchTab('settings')">⚙ Configurações</button>
+    <div class="side-foot">
+      <button class="log-toggle" onclick="toggleLog()">🗒 Log de atividade</button>
+    </div>
+  </aside>
+
+  <!-- Content -->
+  <main class="content">
+    <!-- CÓDIGOS -->
+    <section class="tab show" id="tab-codes">
+      <div class="page-head">
+        <div><h1>Códigos recebidos</h1><p>Verdes (disponíveis) no topo, vermelhos (indisponíveis) no fim. Um novo código sobe o Gmail para o topo.</p></div>
+        <div class="head-actions">
+          <button class="btn ghost" onclick="switchAccount()">↻ Alternar Gmail <span id="switch-hint" class="muted"></span></button>
+        </div>
+      </div>
+      <div class="legend">
+        <span class="legend-item"><i class="dot-sm green"></i> Disponível (&lt; <b id="legend-limit">6</b> códigos em <b id="legend-days">4</b> dias)</span>
+        <span class="legend-item"><i class="dot-sm red"></i> Indisponível (≥ <b id="legend-limit2">6</b> códigos — volta ao verde sozinho)</span>
+        <span class="legend-item muted">Clique no ponto de status para fixar a cor manualmente.</span>
+      </div>
+      <div class="cards-grid" id="cards-grid"></div>
+    </section>
+
+    <!-- CONTAS -->
+    <section class="tab" id="tab-accounts">
+      <div class="page-head">
+        <div><h1>Contas Gmail</h1><p>Cada Gmail abre numa sessão isolada e persistente. Faça login uma vez — ele continua logado mesmo fechando o app.</p></div>
+        <div class="head-actions"><button class="btn primary" onclick="addNewTab()">+ Adicionar Gmail</button></div>
+      </div>
+      <div class="browser-tabs" id="browser-tabs"></div>
+      <div class="webview-container" id="webview-container">
+        <div class="empty-browser" id="empty-browser">
+          <div class="empty-icon">📭</div>
+          <p>Nenhum Gmail aberto. Clique em <b>+ Adicionar Gmail</b> para começar.</p>
+        </div>
+      </div>
+      <div class="managed-wrap">
+        <h3>Contas cadastradas</h3>
+        <div class="managed-list" id="managed-list"></div>
+      </div>
+    </section>
+
+    <!-- DOLPHIN -->
+    <section class="tab" id="tab-dolphin">
+      <div class="page-head"><div><h1>Perfis Dolphin</h1><p>Cria perfis em lote, cada um com uma proxy diferente, e abre todos no final.</p></div></div>
+      <div class="stats-row">
+        <div class="stat"><span class="stat-bar green"></span><div><label>PROXIES LIVRES</label><b id="st-free">0</b></div></div>
+        <div class="stat"><span class="stat-bar muted"></span><div><label>PROXIES USADAS</label><b id="st-used">0</b></div></div>
+        <div class="stat"><span class="stat-bar accent"></span><div><label>CRIADOS AGORA</label><b id="st-ok">0</b></div></div>
+        <div class="stat"><span class="stat-bar red"></span><div><label>FALHAS</label><b id="st-err">0</b></div></div>
+      </div>
+      <div class="card">
+        <h3>Nova execução</h3>
+        <div class="form-grid">
+          <label>Quantidade de perfis<input id="d-qty" type="number" min="1" value="1" /></label>
+          <label>Nome do perfil <span class="muted">({n} vira o número)</span><input id="d-name" value="Perfil {n}" /></label>
+          <label>Começar no número<input id="d-start" type="number" value="1" /></label>
+          <label>Sistema<select id="d-platform"><option value="windows">windows</option><option value="macos">macos</option><option value="linux">linux</option></select></label>
+          <label>Tags (vírgula)<input id="d-tags" placeholder="ex.: lote1" /></label>
+          <label>Pausa entre perfis (s)<input id="d-delay" type="number" step="0.1" value="1" /></label>
+        </div>
+        <label class="switch-row"><input id="d-only4g" type="checkbox" checked /> Somente proxies Mobile 4G (uma diferente por perfil)</label>
+        <label class="switch-row"><input id="d-rotate4g" type="checkbox" onchange="toggleRotate4g()" /> Tenho só 1 proxy 4G — rotacionar o IP dela a cada perfil</label>
+        <div class="inline-row" id="d-rotate-wait-row" style="display:none">
+          <span class="muted">Esperar o novo IP valer</span>
+          <input id="d-rotatewait" type="number" min="2" value="8" style="width:90px" /><span class="muted">segundos (precisa da chave Allan com permissão de configuração)</span>
+        </div>
+        <label class="switch-row"><input id="d-sequential" type="checkbox" onchange="toggleSequential()" /> Criar em sequência (abre um por vez; só cria o próximo quando você FECHAR o anterior)</label>
+        <label class="switch-row"><input id="d-open" type="checkbox" checked /> Abrir todos os perfis ao final</label>
+        <label class="block">Páginas iniciais (uma por linha)<textarea id="d-urls" rows="3" placeholder="google.com&#10;https://mail.google.com"></textarea></label>
+        <div class="form-grid">
+          <label>Zoom inicial da página (%)<input id="d-zoom" type="number" value="80" /></label>
+          <label>Página em primeiro plano (nº)<input id="d-focus" type="number" value="1" /></label>
+        </div>
+        <div class="inline-row">
+          <label class="switch-row"><input id="d-tile" type="checkbox" /> Dividir a tela</label>
+          <select id="d-tilecount"><option>2</option><option>3</option><option selected>4</option><option>6</option><option>9</option></select>
+          <span class="muted">por tela</span>
+        </div>
+        <div class="inline-row">
+          <label class="switch-row"><input id="d-automirror" type="checkbox" /> Espelhar automaticamente ao abrir</label>
+          <span class="muted">Perfil-Mãe:</span>
+          <select id="d-mirrorname"><option>Primeiro perfil aberto</option></select>
+        </div>
+        <div class="run-row">
+          <div class="run-status"><b id="d-status">Pronto para começar</b><span id="d-substatus" class="muted">Confira o token em Configurações.</span></div>
+          <button class="btn primary" id="d-run" onclick="dolphinCreate()">▶ Criar perfis</button>
+          <button class="btn danger" id="d-stop" onclick="dolphinStop()" disabled>■ Parar</button>
+        </div>
+        <div class="progress"><div class="progress-fill" id="d-bar"></div></div>
+      </div>
+      <div class="card">
+        <h3>Perfis criados</h3>
+        <p class="muted">Selecione um ou mais e abra. As páginas iniciais acima são abertas junto.</p>
+        <div class="made-list" id="made-list"></div>
+        <div class="inline-row">
+          <button class="btn primary" onclick="openSelected()">▶ Abrir selecionados</button>
+          <button class="btn ghost" onclick="openAll()">Abrir todos</button>
+          <button class="btn ghost" onclick="refreshRemote()">↻ Atualizar do Dolphin</button>
+          <span class="muted" id="made-count"></span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Espelhamento dos perfis</h3>
+        <p class="muted">Replica os cliques do Perfil-Mãe nos demais perfis abertos.</p>
+        <div class="mirror-status" id="mirror-status">Inativo · selecione um perfil aberto</div>
+        <div class="inline-row">
+          <button class="btn primary" onclick="mirrorSetMother()">Definir Perfil-Mãe</button>
+          <button class="btn ghost" id="m-start" onclick="mirrorStart()">Iniciar espelhamento</button>
+          <button class="btn ghost" id="m-pause" onclick="mirrorPause()" disabled>Pausar</button>
+          <button class="btn danger" onclick="mirrorStop()">Parar</button>
+          <label class="switch-row"><input id="m-forceurls" type="checkbox" onchange="mirrorForceUrls(this.checked)" /> Forçar URLs iguais</label>
+        </div>
+        <div class="inline-row"><input id="m-url" placeholder="https://exemplo.com" style="flex:1" /><button class="btn ghost" onclick="mirrorGoUrl()">Ir para URL</button></div>
+      </div>
+    </section>
+
+    <!-- PROXIES -->
+    <section class="tab" id="tab-proxies">
+      <div class="page-head"><div><h1>Proxies</h1><p>Cada proxy é usada por um único perfil e depois fica marcada.</p></div></div>
+      <div class="card">
+        <h3>Allan Proxys (direto da API)</h3>
+        <p class="muted">Importa suas proxies da conta Allan Proxys. A API não entrega a senha — cole a senha do seu painel (Meu Perfil › Credenciais) uma vez.</p>
+        <div class="inline-row">
+          <input id="a-key" type="password" placeholder="Chave da API (Meu Perfil › Chave de API)" style="flex:1" />
+          <label class="switch-row"><input id="a-showkey" type="checkbox" onchange="document.getElementById('a-key').type=this.checked?'text':'password'" /> Mostrar</label>
+        </div>
+        <div class="inline-row">
+          <input id="a-pass" type="password" placeholder="Senha das proxies" style="flex:1" />
+          <span class="muted">Tipo</span>
+          <select id="a-type"><option>http</option><option>https</option><option>socks5</option><option>socks4</option></select>
+        </div>
+        <div class="inline-row">
+          <button class="btn ghost" onclick="allanTest()">Testar chave</button>
+          <button class="btn primary" onclick="allanFetch()">↓ Importar proxies da API</button>
+          <button class="btn ghost" onclick="allanBalances()">Atualizar saldos (GB)</button>
+          <span class="muted" id="a-status"></span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Adicionar proxies manualmente</h3>
+        <p class="muted">Uma por linha: host:porta · host:porta:login:senha · login:senha@host:porta · socks5://...</p>
+        <textarea id="p-text" rows="5"></textarea>
+        <div class="inline-row">
+          <span class="muted">Tipo padrão</span>
+          <select id="p-type"><option>http</option><option>https</option><option>socks4</option><option>socks5</option><option>ssh</option></select>
+          <span class="muted">Categoria</span>
+          <select id="p-cat"><option value="outro">Geral</option><option value="mobile4g">Mobile 4G</option><option value="residencial">Residencial</option></select>
+          <button class="btn primary" onclick="proxyAdd()">Adicionar à lista</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Lista de proxies <span class="muted" id="p-count"></span></h3>
+        <div class="made-list" id="proxy-list"></div>
+        <div class="inline-row">
+          <button class="btn ghost" onclick="proxyRemoveUnused()">Remover livres</button>
+          <button class="btn danger" onclick="proxyResetUsed()">Liberar todas</button>
+          <button class="btn danger" onclick="proxyClear()">Remover todas</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- SMS -->
+    <section class="tab" id="tab-sms">
+      <div class="page-head">
+        <div><h1>Números SMS (AllanSMS)</h1><p>Compra um número virtual, recebe o código OTP automático e copia. Você só paga quando o código chega.</p></div>
+        <div class="head-actions"><span class="muted" id="sms-balance">—</span></div>
+      </div>
+      <div class="card">
+        <h3>Chave da API</h3>
+        <p class="muted">AllanSMS › painel › API. Fica só neste PC. Chave <code>sk_test_</code> roda em modo teste (tudo simulado).</p>
+        <div class="inline-row">
+          <input id="sms-key" type="password" placeholder="Cole a chave da API da AllanSMS" style="flex:1" />
+          <label class="switch-row"><input id="sms-showkey" type="checkbox" onchange="document.getElementById('sms-key').type=this.checked?'text':'password'" /> Mostrar</label>
+          <button class="btn ghost" onclick="smsTest()">Testar / saldo</button>
+        </div>
+        <div class="inline-row"><span class="muted" id="sms-key-status"></span></div>
+      </div>
+      <div class="card">
+        <h3>Comprar número</h3>
+        <div class="form-grid">
+          <label>País<select id="sms-country"><option value="brazil">brazil</option></select></label>
+          <label>Serviço<select id="sms-service"><option value="">—</option></select></label>
+          <label>Preço máximo (R$) <span class="muted">(opcional)</span><input id="sms-maxprice" type="number" step="0.01" placeholder="sem limite" /></label>
+        </div>
+        <div class="inline-row">
+          <button class="btn ghost" onclick="smsLoadServices()">↻ Atualizar serviços/preços</button>
+          <button class="btn primary" id="sms-buy-btn" onclick="smsBuy()">📱 Comprar e aguardar código</button>
+          <span class="muted" id="sms-buy-status"></span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Meus números <span class="muted" id="sms-count"></span></h3>
+        <p class="muted">O número fica ativo ~20 min e aceita vários SMS. O código aparece sozinho aqui quando chega.</p>
+        <div class="made-list" id="sms-orders"></div>
+        <div class="inline-row">
+          <button class="btn ghost" onclick="smsRefreshList()">↻ Atualizar</button>
+          <button class="btn ghost" onclick="smsClearDone()">Limpar finalizados</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- GMAIL COMPRADOS (FlowOTP) -->
+    <section class="tab" id="tab-flow">
+      <div class="page-head">
+        <div><h1>Gmail comprados (FlowOTP)</h1><p>Compra um Gmail que recebe o código OTP. O código chega sozinho por polling (a cada 5s) e vai pra sua extensão.</p></div>
+        <div class="head-actions"><span class="muted" id="flow-balance">—</span></div>
+      </div>
+      <div class="card">
+        <h3>Chave da API</h3>
+        <p class="muted">FlowOTP › painel › Chaves de API. Fica só neste PC.</p>
+        <div class="inline-row">
+          <input id="flow-key" type="password" placeholder="Cole a chave da API (X-API-Key)" style="flex:1" />
+          <label class="switch-row"><input id="flow-showkey" type="checkbox" onchange="document.getElementById('flow-key').type=this.checked?'text':'password'" /> Mostrar</label>
+          <button class="btn ghost" onclick="flowTest()">Testar / saldo</button>
+        </div>
+        <div class="inline-row"><span class="muted" id="flow-key-status"></span></div>
+      </div>
+      <div class="card">
+        <h3>Comprar Gmail</h3>
+        <div class="form-grid">
+          <label>Serviço<select id="flow-service" onchange="flowSaveService()"><option value="">—</option></select></label>
+          <label>Preço máximo (R$) <span class="muted">(opcional)</span><input id="flow-maxprice" type="number" step="0.01" placeholder="sem limite" /></label>
+        </div>
+        <div class="inline-row">
+          <button class="btn ghost" onclick="flowLoadServices()">↻ Atualizar serviços/preços</button>
+          <button class="btn primary" id="flow-buy-btn" onclick="flowBuy()">📧 Comprar e aguardar código</button>
+          <span class="muted" id="flow-buy-status"></span>
+        </div>
+        <p class="muted">Até 15 Gmails em preparação ao mesmo tempo. Cada Gmail recebe até 3 códigos em 24h.</p>
+      </div>
+      <div class="card">
+        <h3>Meus Gmails <span class="muted" id="flow-count"></span></h3>
+        <p class="muted">O e-mail e o código aparecem sozinhos aqui quando chegam. Quando o pedido fecha, ele para de ser consultado.</p>
+        <div class="made-list" id="flow-orders"></div>
+        <div class="inline-row">
+          <button class="btn ghost" onclick="flowRefreshList()">↻ Atualizar</button>
+          <button class="btn ghost" onclick="flowClearDone()">Limpar fechados</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- API -->
+    <section class="tab" id="tab-api">
+      <div class="page-head"><div><h1>API / Extensão Chrome</h1><p>Servidor local que entrega os Gmails disponíveis e faz push de cada código recebido para a tua extensão.</p></div></div>
+      <div class="card">
+        <h3>Servidor local</h3>
+        <div class="kv"><span>Estado</span><b id="srv-state">—</b></div>
+        <div class="kv"><span>Base URL</span><code id="srv-url">—</code> <button class="btn ghost sm" onclick="cp(document.getElementById('srv-url').textContent)">Copiar</button></div>
+        <div class="kv"><span>Token</span><code id="srv-token" class="token">—</code> <button class="btn ghost sm" onclick="cp(document.getElementById('srv-token').textContent)">Copiar</button> <button class="btn ghost sm" onclick="regenToken()">Gerar novo</button></div>
+        <div class="inline-row">
+          <label class="switch-row"><input id="srv-enabled" type="checkbox" onchange="toggleServer(this.checked)" /> Servidor ligado</label>
+          <span class="muted">Porta</span><input id="srv-port" type="number" style="width:110px" onchange="setPort(this.value)" />
+        </div>
+      </div>
+      <div class="card">
+        <h3>Endpoints</h3>
+        <ul class="endpoints">
+          <li><code>GET /api/available</code> — Gmails disponíveis (verdes)</li>
+          <li><code>GET /api/codes?email=...</code> — códigos de um Gmail</li>
+          <li><code>GET /api/latest?email=...</code> — último código</li>
+          <li><code>GET /api/sms</code> — números SMS ativos (telefone + último OTP)</li>
+          <li><code>GET /api/sms/latest</code> — último OTP recebido (telefone + código)</li>
+          <li><code>GET /api/flow</code> — Gmails comprados ativos (e-mail, código, cota e <code>exhausted</code>)</li>
+          <li><code>GET /api/flow/latest</code> — último código de Gmail comprado</li>
+          <li><code>POST /api/flow/buy</code> — compra outro Gmail; body <code>{ service_id?, max_price_cents? }</code></li>
+          <li><code>WS /ws</code> — push em tempo real: código de Gmail, OTP de SMS e código de Gmail comprado</li>
+        </ul>
+        <p class="muted">Mande o token em <code>?token=...</code> ou no header <code>X-Token</code>.</p>
+      </div>
+      <div class="card">
+        <h3>Payload de exemplo (o que a extensão recebe)</h3>
+        <p class="muted">Push pelo WebSocket quando um Gmail recebe um código:</p>
+        <pre id="payload-code"></pre>
+        <p class="muted">Resposta de <code>GET /api/available</code>:</p>
+        <pre id="payload-available"></pre>
+        <p class="muted">Número SMS + OTP (push pelo WebSocket quando o código chega):</p>
+        <pre id="payload-sms"></pre>
+        <p class="muted">Resposta de <code>GET /api/sms</code> (números ativos):</p>
+        <pre id="payload-sms-list"></pre>
+        <p class="muted">Gmail comprado + código (push pelo WebSocket quando o código chega):</p>
+        <pre id="payload-flow"></pre>
+        <p class="muted">Exemplo de uso na extensão (<code>background.js</code>):</p>
+        <pre id="payload-js"></pre>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="tab" id="tab-settings">
+      <div class="page-head"><div><h1>Configurações</h1><p>Conta do Dolphin Anty, regras de status e servidor local.</p></div></div>
+      <div class="card">
+        <h3>Token da API do Dolphin Anty</h3>
+        <p class="muted">Dolphin Anty › Configurações › API. Fica só neste PC.</p>
+        <div class="inline-row"><input id="s-token" type="password" placeholder="Cole o token" style="flex:1" /><label class="switch-row"><input id="s-show" type="checkbox" onchange="document.getElementById('s-token').type=this.checked?'text':'password'" /> Mostrar</label><button class="btn primary" onclick="dolphinTest()">Testar conexão</button></div>
+        <div class="inline-row"><span class="dot-sm" id="s-remote"></span><span id="s-remote-txt" class="muted">API remota: não testada</span> <span class="dot-sm" id="s-local"></span><span id="s-local-txt" class="muted">Dolphin local: não testado</span></div>
+      </div>
+      <div class="card">
+        <h3>Endereços da API</h3>
+        <label class="block">API remota (criação de perfis)<input id="s-remote-api" /></label>
+        <label class="block">API local (abrir perfis, app Dolphin aberto)<input id="s-local-api" /></label>
+      </div>
+      <div class="card">
+        <h3>Regra de status dos Gmails</h3>
+        <div class="form-grid">
+          <label>Limite de códigos (vira vermelho em)<input id="s-limit" type="number" min="1" value="6" /></label>
+          <label>Janela (dias)<input id="s-days" type="number" min="1" value="4" /></label>
+        </div>
+      </div>
+      <div class="inline-row"><button class="btn primary" onclick="saveSettings()">Salvar configurações</button></div>
+    </section>
+  </main>
+</div>
+
+<!-- Log drawer -->
+<div class="log-drawer" id="log-drawer">
+  <div class="log-head"><b>Log de atividade</b><button class="btn ghost sm" onclick="toggleLog()">Fechar</button></div>
+  <div class="log-body" id="log-body"></div>
+</div>
+
+<div id="toast"></div>
+<script src="renderer.js"></script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+{
+  "name": "flash-creator",
+  "version": "1.0.0",
+  "description": "App unificado: monitor de códigos do Gmail + automação de perfis Dolphin Anty, com API local para extensão Chrome",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --dir"
+  },
+  "author": "Guilherme",
+  "license": "MIT",
+  "build": {
+    "appId": "com.flashcreator.app",
+    "productName": "Flash Creator",
+    "compression": "store",
+    "npmRebuild": false,
+    "forceCodeSigning": false,
+    "directories": { "output": "dist" },
+    "files": ["**/*", "!dist/**", "!extensao-exemplo/**"],
+    "win": { "target": "dir", "signAndEditExecutable": false }
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "32.3.3",
+    "electron-builder": "24.13.3"
+  }
+}

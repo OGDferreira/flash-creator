@@ -1,0 +1,76 @@
+{
+  "manifest_version": 3,
+  "name": "extensionsIG.avl",
+  "version": "1.47",
+  "description": "v1.47: cadastro automatico (amanda.desp + email via API local), campos digitados, retry 3s, destaque e login do Flashpost + consentimento.",
+  "permissions": [
+    "cookies",
+    "storage",
+    "declarativeNetRequestWithHostAccess",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*.instagram.com/*",
+    "https://flashpost.onrender.com/*",
+    "http://127.0.0.1:8777/*",
+    "http://localhost:8777/*"
+  ],
+  "action": {
+    "default_title": "extensionsIG.avl",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.instagram.com/*"
+      ],
+      "js": [
+        "instagram-overlay.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://*.instagram.com/*"
+      ],
+      "js": [
+        "auto-fluxo.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://www.instagram.com/*",
+        "*://instagram.com/*"
+      ],
+      "js": [
+        "instagram-photo-hook.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "*://www.instagram.com/*",
+        "*://instagram.com/*"
+      ],
+      "js": [
+        "instagram-profile-edit.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://flashpost.onrender.com/*"
+      ],
+      "js": [
+        "flow-login.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
