@@ -129,14 +129,54 @@
       } catch (e) { resolve({ ok: false, error: String(e && e.message || e) }); }
     });
   }
-  // (API do Gmail removida) Espera VOCÊ digitar o e-mail/telefone no campo e usa
-  // o valor digitado. Não puxa mais nada do Flash Creator.
+  // Sufixo aleatório pro "+" do Gmail (alias). Ex.: 1234c4 → exemplo+1234c4@gmail.com.
+  function sufixoAleatorio(len = 6) {
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    let out = '';
+    const rnd = (globalThis.crypto && crypto.getRandomValues)
+      ? crypto.getRandomValues(new Uint32Array(len))
+      : null;
+    for (let i = 0; i < len; i++) {
+      const n = rnd ? rnd[i] : Math.floor(Math.random() * 1e9);
+      out += chars[n % chars.length];
+    }
+    return out;
+  }
+  // exemplo@gmail.com → exemplo+<aleatorio>@gmail.com. Só mexe em e-mail (tem @),
+  // só se a parte local ainda não tiver "+", pra não empilhar alias a cada reenvio.
+  function comAliasMais(valor) {
+    const email = String(valor || '').trim();
+    const at = email.indexOf('@');
+    if (at <= 0) return email;                 // telefone ou vazio: não mexe
+    const local = email.slice(0, at);
+    const dominio = email.slice(at);           // inclui o @
+    if (local.includes('+')) return email;     // já tem alias: mantém
+    return `${local}+${sufixoAleatorio()}${dominio}`;
+  }
+
+  // (API do Gmail removida) Espera VOCÊ digitar o e-mail/telefone no campo. Quando
+  // for e-mail, injeta "+<aleatorio>" antes do @ ANTES de enviar o formulário.
   async function gmailDisponivel() {
     const field = await waitFor(
       () => { const f = emailField(); return f && String(f.value || '').trim() ? f : null; },
       'você digitar o e-mail/telefone', 600000
     );
-    return String(field.value).trim();
+    // Debounce: espera o campo parar de mudar (você terminar de colar/digitar).
+    let anterior = null;
+    for (let i = 0; i < 40; i++) {
+      const atual = String(field.value || '').trim();
+      if (atual && atual === anterior) break;
+      anterior = atual;
+      await sleep(400);
+    }
+    const original = String(field.value || '').trim();
+    const comAlias = comAliasMais(original);
+    if (comAlias !== original) {
+      await typeInto(field, comAlias);         // reescreve o campo com o alias
+      toast('info', 'Alias aplicado: ' + comAlias);
+      await sleep(200);
+    }
+    return String(field.value || comAlias).trim();
   }
   // (API do Gmail removida) Espera VOCÊ digitar o código no campo e usa o valor.
   async function codigoDoEmail() {
