@@ -441,10 +441,18 @@
 
     if (isSignup()) { S.set('cadastro'); await fluxoCadastro(); return; }
 
-    // Cadastro concluído: não executar nenhuma automação pós-cadastro.
-    // O Instagram fica livre para permanecer na página inicial ou navegar
-    // sozinho; a extensão não abre arquivamento, perfil, Story ou destaque.
-    if (S.get() === 'ir-perfil') return;
+    // Cadastro concluído: não mexe no perfil (nada de arquivamento/edição).
+    // Só abre o Flashpost UMA vez, automaticamente, pra dar continuidade ao fluxo
+    // (conectar a conta recém-criada). Depois disso, deixa o usuário usar.
+    if (S.get() === 'ir-perfil') {
+      try {
+        if (sessionStorage.getItem('itm_af_flashpost_aberto') !== '1') {
+          sessionStorage.setItem('itm_af_flashpost_aberto', '1');
+          chrome.runtime.sendMessage({ type: 'afOpenFlashpost' });
+        }
+      } catch { /* ok */ }
+      return;
+    }
 
     // Início: leva o usuário para a tela de cadastro (uma vez por sessão).
     if (S.get() === 'inicio') {

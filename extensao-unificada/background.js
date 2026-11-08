@@ -911,7 +911,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     },
     afLogoutAndRestart: () => afLogoutAndRestart(sender),
     afOpenFlashpost: async () => {
-      try { const tab = await chrome.tabs.create({ url: 'https://flashpost.onrender.com/login' }); return { ok: true, tabId: tab.id }; }
+      // #afrun=<id> marca uma conexão nova: o flow-login do Flashpost reseta o
+      // guard e conecta a conta recém-criada (sem entrar em loop depois).
+      try { const tab = await chrome.tabs.create({ url: 'https://flashpost.onrender.com/login#afrun=' + Date.now() }); return { ok: true, tabId: tab.id }; }
       catch (e) { return { ok: false, error: String(e?.message || e) }; }
     },
     preparePost: () => handlePreparePost(),

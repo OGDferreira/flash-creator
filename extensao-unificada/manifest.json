@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "extensionsIG.avl",
-  "version": "1.65",
-  "description": "v1.65: botão flutuante pra abrir o Flashpost; sem API de Gmail; conta suspensa desloga e recomeça o cadastro; não força a página de edição.",
+  "version": "1.66",
+  "description": "v1.66: Flashpost abre sozinho após o cadastro e conecta a conta UMA vez (sem loop); botão pra abrir o Flashpost; sem API de Gmail; suspenso desloga e recomeça.",
   "permissions": [
     "cookies",
     "storage",

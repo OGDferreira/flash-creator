@@ -111,8 +111,9 @@
     button.title = 'Abrir o Flashpost em uma nova guia';
     button.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2147483647;border:0;border-radius:9px;padding:10px 14px;color:#fff;background:#7c5cff;cursor:pointer;font:700 13px/1.2 system-ui;box-shadow:0 4px 15px #0005';
     button.addEventListener('click', () => {
+      // #afrun=<id> = conexão nova (reseta o guard do flow-login, evita loop).
       try {
-        const win = window.open(FLASHPOST_URL, '_blank');
+        const win = window.open(FLASHPOST_URL + '#afrun=' + Date.now(), '_blank');
         if (!win) throw new Error('popup bloqueado');
       } catch {
         try { chrome.runtime.sendMessage({ type: 'afOpenFlashpost' }); } catch { /* ignora */ }

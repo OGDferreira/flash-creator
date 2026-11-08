@@ -95,57 +95,92 @@
   const ENTRAR = [/^(entrar|login|sign in|acessar|continuar|enviar)$/];
   const PERMITIR = [/^permitir$/, /^allow$/, /autorizar/, /authorize/, /aprovar/, /approve/];
 
+  // Estado persistente (sobrevive aos redirects do OAuth) pra NÃO entrar em loop
+  // de ficar relogando e clicando "Conectar conta" toda vez que a página recarrega.
+  const FP_KEY = 'itm_fp_state_v1';
+  const COOLDOWN_MS = 3 * 60 * 1000; // após conectar, não repete por 3 min
+  function fpState() { try { return JSON.parse(localStorage.getItem(FP_KEY) || '{}'); } catch { return {}; } }
+  function setFp(patch) { try { localStorage.setItem(FP_KEY, JSON.stringify({ ...fpState(), ...patch })); } catch { /* ok */ } }
+  // "Run" único (a extensão abre o Flashpost com #afrun=<id> por conta nova).
+  function currentRun() { const m = /[#&]afrun=([^&]+)/.exec(location.hash || ''); return m ? m[1] : ''; }
+
   let loginFeito = false;
   let conectarFeito = false;
   let permitirFeito = false;
-  async function run() {
-    if (permitirFeito) return;
+  let stopped = false;
+  let rodando = false;
 
-    // 1) Preenche usuário e senha (se o formulário de login existir).
-    const fields = getFields();
-    if (fields && !loginFeito) {
-      loginFeito = true;
-      try {
-        await step('Preencher login', async () => {
-          await typeInto(fields.user, LOGIN.username);
-          await typeInto(fields.pass, LOGIN.password);
-          await sleep(200);
-          if (fields.user.value !== LOGIN.username || fields.pass.value !== LOGIN.password) {
-            throw new Error('campos não aceitaram os dados');
-          }
-        });
-        notice('Login preenchido. Enviando…');
-        // 2) Entra (se houver um botão de login separado do "conectar conta").
-        const entrar = findButton(ENTRAR);
-        if (entrar) { entrar.click(); }
-        else if (fields.pass.form) { fields.pass.form.requestSubmit(); }
-      } catch (e) {
-        notice('Não consegui preencher: ' + (e?.message || e), true);
-        loginFeito = false;
+  function stopFlow() { stopped = true; try { observer.disconnect(); } catch { /* ok */ } }
+
+  async function run() {
+    if (stopped || permitirFeito || rodando) return;
+    rodando = true;
+    try {
+      const now = Date.now();
+      const runId = currentRun();
+      let st = fpState();
+      // Conta nova (aberta pela extensão com novo afrun): zera o guard e conecta de novo.
+      if (runId && runId !== st.lastRun) { setFp({ lastRun: runId, conectarAt: 0, done: false }); st = fpState(); }
+
+      // Já conectou há pouco (ex.: voltou do OAuth): NÃO repete o fluxo. Só confirma
+      // "Permitir" se essa tela estiver aqui e então para de vez.
+      if (st.conectarAt && (now - st.conectarAt < COOLDOWN_MS)) {
+        const permitir0 = findButton(PERMITIR);
+        if (permitir0) { permitir0.click(); permitirFeito = true; setFp({ done: true }); notice('Permissão confirmada.'); }
+        stopFlow();
         return;
       }
-    }
 
-    // 3) Depois que o site carrega por completo, clica em "Conectar conta".
-    const conectar = await waitFor(() => findButton(CONECTAR), 5000);
-    if (conectar && !conectarFeito) {
-      conectar.click();
-      conectarFeito = true;
-      notice('Conectar conta acionado.');
-    }
+      // 1) Preenche usuário e senha (se o formulário de login existir).
+      const fields = getFields();
+      if (fields && !loginFeito) {
+        loginFeito = true;
+        try {
+          await step('Preencher login', async () => {
+            await typeInto(fields.user, LOGIN.username);
+            await typeInto(fields.pass, LOGIN.password);
+            await sleep(200);
+            if (fields.user.value !== LOGIN.username || fields.pass.value !== LOGIN.password) {
+              throw new Error('campos não aceitaram os dados');
+            }
+          });
+          notice('Login preenchido. Enviando…');
+          const entrar = findButton(ENTRAR);
+          if (entrar) { entrar.click(); }
+          else if (fields.pass.form) { fields.pass.form.requestSubmit(); }
+        } catch (e) {
+          notice('Não consegui preencher: ' + (e?.message || e), true);
+          loginFeito = false;
+          return;
+        }
+      }
 
-    // Após Conectar conta, o Flashpost pode mostrar uma tela de autorização.
-    // O clique é limitado a rótulos explícitos para não confirmar outra ação.
-    const permitir = await waitFor(() => findButton(PERMITIR), 20000);
-    if (permitir && !permitirFeito) {
-      permitir.click();
-      permitirFeito = true;
-      notice('Permissão confirmada.');
-    }
+      // 2) Clica em "Conectar conta" UMA vez e marca o horário (guard do cooldown).
+      const conectar = await waitFor(() => findButton(CONECTAR), 5000);
+      if (conectar && !conectarFeito) {
+        conectar.click();
+        conectarFeito = true;
+        setFp({ conectarAt: Date.now() });
+        notice('Conectar conta acionado.');
+      }
+
+      // 3) Após Conectar conta, pode aparecer a tela de autorização ("Permitir").
+      const permitir = await waitFor(() => findButton(PERMITIR), 20000);
+      if (permitir && !permitirFeito) {
+        permitir.click();
+        permitirFeito = true;
+        setFp({ done: true });
+        notice('Permissão confirmada.');
+        stopFlow();
+      }
+    } finally { rodando = false; }
   }
 
-  const kick = () => { run().catch((e) => notice('Flashpost: ' + (e?.message || e), true)); };
+  // Observer com pequena folga (debounce) pra não disparar em rajada.
+  let kickTimer = null;
+  const kick = () => { if (kickTimer) return; kickTimer = setTimeout(() => { kickTimer = null; run().catch((e) => notice('Flashpost: ' + (e?.message || e), true)); }, 500); };
+  const observer = new MutationObserver(() => { if (!stopped && !permitirFeito) kick(); });
+  observer.observe(document.documentElement, { subtree: true, childList: true });
   setTimeout(kick, 1200);
-  new MutationObserver(() => { if (!permitirFeito) kick(); }).observe(document.documentElement, { subtree: true, childList: true });
   window.addEventListener('pageshow', kick);
 })();
