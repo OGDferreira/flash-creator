@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "extensionsIG.avl",
-  "version": "1.66",
-  "description": "v1.66: Flashpost abre sozinho após o cadastro e conecta a conta UMA vez (sem loop); botão pra abrir o Flashpost; sem API de Gmail; suspenso desloga e recomeça.",
+  "version": "1.67",
+  "description": "v1.67: destaque novo (fluxo de tela) só roda na página do perfil DEPOIS de conectar a conta no Flashpost; removido o destaque antigo via API. Flashpost abre sozinho após o cadastro e conecta UMA vez (sem loop); botão pra abrir o Flashpost; sem API de Gmail; suspenso desloga e recomeça. Botões não se sobrepõem.",
   "permissions": [
     "cookies",
     "storage",
@@ -50,6 +50,15 @@
       ],
       "js": [
         "unified-orchestrator.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://*.instagram.com/*"
+      ],
+      "js": [
+        "destaque.js"
       ],
       "run_at": "document_idle"
     },

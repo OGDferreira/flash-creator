@@ -6,15 +6,17 @@
   const TOAST_ID = 'jeni-destaque-story-toast';
   const STYLE_ID = 'jeni-destaque-story-style';
   const HIGHLIGHT_NAME = '🎁🔥';
-  const AUTO_KEY = 'jeniDestaqueAutoClickPending';
-  const UNIFIED_PENDING_KEY = 'extensionsIG.avl.unified.highlightPending';
-  const UNIFIED_STAGE_PREFIX = 'extensionsIG.avl.unifiedFlow.v1.';
+  // Flag compartilhada (chrome.storage.local): o flow-login do Flashpost grava
+  // quando a conta é conectada. O destaque só é criado depois disso, no perfil.
+  const GATE_KEY = 'itm_destaque_liberado';
 
   const style = document.createElement('style');
   style.id = STYLE_ID;
+  // Botão/toast afastados do botão "Flashpost" (que fica em right:16;bottom:16),
+  // pra não sobrepor: ficam empilhados acima dele.
   style.textContent = `
     #${BUTTON_ID} {
-      position: fixed; right: 18px; bottom: 18px; z-index: 2147483647;
+      position: fixed; right: 16px; bottom: 76px; z-index: 2147483647;
       border: 0; border-radius: 10px; padding: 12px 15px;
       background: #1f6feb; color: #fff; cursor: pointer;
       font: 700 14px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -23,7 +25,7 @@
     #${BUTTON_ID}:hover { filter: brightness(1.1); }
     #${BUTTON_ID}:disabled { opacity: .65; cursor: wait; }
     #${TOAST_ID} {
-      position: fixed; right: 18px; bottom: 78px; z-index: 2147483647;
+      position: fixed; right: 16px; bottom: 136px; z-index: 2147483647;
       max-width: 360px; padding: 10px 13px; border-radius: 9px;
       color: #fff; white-space: pre-line; word-break: break-word;
       font: 600 13px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -39,23 +41,35 @@
   button.id = BUTTON_ID;
   button.type = 'button';
   button.textContent = 'Criar destaque do Story';
+  button.style.display = 'none'; // só aparece na página do perfil
   document.documentElement.appendChild(button);
 
   const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
   const clean = (value) => String(value || '')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .toLowerCase().replace(/\s+/g, ' ').trim();
   const visible = (element) => {
     if (!element || !element.isConnected) return false;
     const rect = element.getBoundingClientRect();
     return rect.width > 0 && rect.height > 0;
   };
+
+  // Texto "humano" de um controle: só o que o usuário lê (conteúdo,
+  // aria-label, title). NÃO inclui role/data-testid, senão um
+  // <div role="button">Avançar</div> vira "avancar button" e quebra
+  // o match ancorado /^avancar$/ — era essa a causa do travamento.
+  const labelOf = (element) => clean([
+    element?.textContent,
+    element?.getAttribute?.('aria-label'),
+    element?.getAttribute?.('title'),
+  ].filter(Boolean).join(' '));
+
+  // Texto amplo, usado só para heurísticas de descoberta (achar o "+").
   const textOf = (element) => clean([
     element?.textContent,
     element?.getAttribute?.('aria-label'),
     element?.getAttribute?.('title'),
     element?.getAttribute?.('data-testid'),
-    element?.getAttribute?.('role'),
   ].filter(Boolean).join(' '));
 
   function toast(kind, message, duration = 7000) {
@@ -77,23 +91,39 @@
       !/^\/(accounts|explore|direct|reels|stories|about|web|emailsignup|login)$/i.test(path);
   }
 
-  function isReelsPage() {
-    return /^\/reels(?:\/|$)/i.test(location.pathname);
-  }
-
-  function findProfileLink() {
-    return [...document.querySelectorAll('a[href]')].filter(visible).find(link => {
-      try {
-        const path = new URL(link.href, location.origin).pathname.replace(/\/$/, '');
-        return /^\/[^/]+$/i.test(path) &&
-          !/^\/(accounts|explore|direct|reels|stories|about|web|emailsignup|login)$/i.test(path);
-      } catch (_) { return false; }
-    });
-  }
-
   function clickable(element) {
     if (!element || !element.isConnected) return null;
     return element.closest('button, [role="button"], a') || element;
+  }
+
+  // Clique "de verdade": pointer/mouse down+up e UM único click.
+  function realClick(element) {
+    const target = clickable(element);
+    if (!target || !target.isConnected) return false;
+    const rect = target.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    const opts = { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, button: 0 };
+    for (const type of ['pointerover', 'pointerenter', 'pointerdown', 'mousedown', 'pointerup', 'mouseup']) {
+      try { target.dispatchEvent(new (type.startsWith('pointer') ? PointerEvent : MouseEvent)(type, opts)); } catch (_) {}
+    }
+    try { target.click(); } catch (_) {}
+    return true;
+  }
+
+  // Espera o botão clicado sumir/mudar, pra não clicar no mesmo
+  // "Avançar" de novo enquanto o pop-up troca de etapa.
+  async function waitGone(element, timeout = 6000) {
+    const before = labelOf(element);
+    const end = Date.now() + timeout;
+    while (Date.now() < end) {
+      if (!element.isConnected || !visible(element) || labelOf(element) !== before) return;
+      await sleep(150);
+    }
+  }
+
+  function dialogOpen() {
+    return [...document.querySelectorAll('[role="dialog"], [aria-modal="true"]')].some(visible);
   }
 
   function findNewHighlightButton() {
@@ -102,9 +132,6 @@
         .test(`${element.getAttribute('title') || ''} ${element.getAttribute('aria-label') || ''} ${element.getAttribute('data-testid') || ''}`));
     if (plusHint) return clickable(plusHint);
 
-    // No perfil mostrado pelo Instagram, o texto “Novo” fica abaixo do
-    // círculo e o tooltip do ícone é “Ícone de mais”; o elemento com o texto
-    // nem sempre é o próprio botão.
     const newLabel = [...document.querySelectorAll('span, div, p, a')]
       .find((element) => clean(element.textContent) === 'novo' || clean(element.textContent) === 'new');
     if (newLabel) {
@@ -119,7 +146,6 @@
     });
     if (direct) return direct;
 
-    // O círculo de adicionar destaque geralmente é um botão sem texto.
     const circles = candidates.filter((element) => {
       const rect = element.getBoundingClientRect();
       if (!rect.width || !rect.height || rect.width > 180 || rect.height > 180) return false;
@@ -142,13 +168,15 @@
     }) || inputs.find((element) => element.type === 'text' || element.tagName === 'TEXTAREA');
   }
 
+  // Procura o botão azul (Avançar / Concluir) comparando só o texto humano.
   function findButtonByText(patterns) {
-    return [...document.querySelectorAll('button, [role="button"], a')]
-      .filter((element) => {
-        const rect = element.getBoundingClientRect();
-        return rect.width > 0 && rect.height > 0 && patterns.some(pattern => pattern.test(textOf(element)));
-      })
-      .sort((a, b) => textOf(a).length - textOf(b).length)[0] || null;
+    const matches = [...currentDialog().querySelectorAll('button, [role="button"], a')]
+      .filter(visible)
+      .map((element) => ({ element, label: labelOf(element) }))
+      .filter(({ label }) => patterns.some(pattern => pattern.test(label)));
+    // Prefere o rótulo mais curto (o próprio botão, não um contêiner pai).
+    matches.sort((a, b) => a.label.length - b.label.length);
+    return matches.length ? clickable(matches[0].element) : null;
   }
 
   function setNativeValue(input, value) {
@@ -161,138 +189,170 @@
     input.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
-  function storyChoices() {
-    const providedRoot = document.querySelector(
-      'div.x1ey2m1c.x78zum5.xdt5ytf.xtijo5x.x1o0tod',
-    );
+  function currentDialog() {
     const dialogs = [...document.querySelectorAll('[role="dialog"], [aria-modal="true"]')]
-      .filter(element => element.getBoundingClientRect().width > 0);
-    const root = providedRoot || dialogs[dialogs.length - 1] || document;
-    const media = [...root.querySelectorAll('img, video')].filter(element => {
-      const rect = element.getBoundingClientRect();
-      return rect.width >= 35 && rect.height >= 35 && rect.width > 0 && rect.height > 0;
-    });
-    const choices = media.map((element) => {
-      const candidate = element.closest('button, [role="button"], [role="checkbox"], [role="radio"], label, li, div');
-      return candidate || element;
-    }).filter((element) => {
-      const rect = element.getBoundingClientRect();
-      if (!rect.width || !rect.height || rect.width > 360 || rect.height > 420 || element.disabled) return false;
-      return rect.width >= 45 && rect.height >= 45;
-    });
-    return choices.filter((element, index) => !choices.some((other, otherIndex) =>
-      otherIndex < index && other.contains(element)));
+      .filter(visible);
+    return dialogs[dialogs.length - 1] || document;
   }
 
-  function lastStoryChoice() {
-    const choices = storyChoices();
-    return choices[choices.length - 1] || null;
+  // Seleciona o Story no pop-up "Stories". Prioriza marcar o checkbox;
+  // se não houver, clica no próprio thumbnail (que marca o checkbox).
+  function findStoryToSelect() {
+    const root = currentDialog();
+
+    // 1) checkbox explícito ainda não marcado
+    const checkbox = [...root.querySelectorAll('[role="checkbox"], input[type="checkbox"]')]
+      .filter(visible)
+      .find((el) => el.getAttribute('aria-checked') !== 'true' && !el.checked);
+    if (checkbox) return checkbox;
+
+    // 2) thumbnail do Story: contêiner clicável com imagem/vídeo
+    const media = [...root.querySelectorAll('img, video')].filter((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width >= 60 && rect.height >= 80;
+    });
+    const choice = media
+      .map((element) => element.closest('button, [role="button"], [role="checkbox"], label, li, div') || element)
+      .find((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.width >= 60 && rect.height >= 80 && rect.width <= 400 && rect.height <= 520;
+      });
+    if (choice) return choice;
+
+    // 3) fallback: qualquer bloco clicável grande dentro do diálogo
+    const blocks = [...root.querySelectorAll('div, li, label, [role="button"]')].filter((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width >= 90 && rect.width <= 400 && rect.height >= 120 && rect.height <= 520;
+    });
+    blocks.sort((a, b) => {
+      const ra = a.getBoundingClientRect();
+      const rb = b.getBoundingClientRect();
+      return (ra.width * ra.height) - (rb.width * rb.height);
+    });
+    return blocks[0] || null;
   }
 
-  async function waitFor(find, label, timeout = 10000) {
+  function storyIsSelected() {
+    const root = currentDialog();
+    return [...root.querySelectorAll('[role="checkbox"], input[type="checkbox"]')]
+      .some((el) => el.getAttribute('aria-checked') === 'true' || el.checked);
+  }
+
+  async function waitFor(find, label, timeout = 12000) {
     const end = Date.now() + timeout;
     while (Date.now() < end) {
-      const result = find();
+      let result = null;
+      try { result = find(); } catch (_) {}
       if (result) return result;
       await sleep(300);
     }
     throw new Error(`Não encontrei ${label}.`);
   }
 
+  const NEXT_PATTERNS = [/^avancar$/, /^next$/, /^proximo$/, /^continuar$/];
+  const DONE_PATTERNS = [/^concluir$/, /^finish$/, /^done$/, /^pronto$/];
+
   async function createHighlight() {
     if (!isProfilePage()) throw new Error('Abra a página do perfil do Instagram antes de iniciar.');
 
-    toast('info', 'Procurando o círculo para criar um destaque…');
-    const open = await waitFor(findNewHighlightButton, 'o botão de novo destaque');
-    clickable(open).click();
+    // Se o pop-up de criação já estiver aberto, não clica no "Novo" de novo.
+    if (!dialogOpen()) {
+      toast('info', 'Procurando o círculo para criar um destaque…');
+      const open = await waitFor(findNewHighlightButton, 'o botão de novo destaque');
+      realClick(open);
+      await waitFor(dialogOpen, 'o pop-up de novo destaque', 8000);
+    }
 
     const input = await waitFor(findNameInput, 'o campo do nome do destaque');
     input.focus();
-    setNativeValue(input, HIGHLIGHT_NAME);
-    toast('info', 'Nome preenchido. Avançando…');
+    // Só preenche se ainda estiver vazio (o usuário pode já ter digitado).
+    if (!clean(input.value)) setNativeValue(input, HIGHLIGHT_NAME);
+    toast('info', 'Nome pronto. Avançando…');
 
+    // Etapa 1 → Avançar (tela "Novo destaque")
     const firstNext = await waitFor(
-      () => findButtonByText([/^avancar$/, /^avançar$/, /^next$/, /^proximo$/, /^próximo$/]),
+      () => findButtonByText(NEXT_PATTERNS),
       'o botão Avançar após o nome',
     );
-    clickable(firstNext).click();
-    await sleep(900);
+    realClick(firstNext);
+    await waitGone(firstNext);
+    await sleep(600);
 
-    const lastStory = await waitFor(lastStoryChoice, 'o último Story publicado');
-    clickable(lastStory).click();
-    toast('info', 'Último Story selecionado. Avançando…');
+    // Etapa 2 → pop-up "Stories": marcar o único Story disponível
+    // (só clica se ainda não estiver marcado, senão desmarcaria)
+    if (!storyIsSelected()) {
+      const story = await waitFor(findStoryToSelect, 'o Story para selecionar');
+      realClick(story);
+      await waitFor(storyIsSelected, 'a confirmação de seleção do Story', 4000)
+        .catch(() => { /* alguns layouts não expõem aria-checked; segue mesmo assim */ });
+    }
+    toast('info', 'Story selecionado. Avançando…');
 
+    // Etapa 2 → Avançar (dentro do pop-up Stories)
     const secondNext = await waitFor(
-      () => findButtonByText([/^avancar$/, /^avançar$/, /^next$/, /^proximo$/, /^próximo$/]),
+      () => findButtonByText(NEXT_PATTERNS),
       'o botão Avançar após selecionar o Story',
     );
-    clickable(secondNext).click();
-    await sleep(900);
+    realClick(secondNext);
+    await waitGone(secondNext);
+    await sleep(600);
+
+    // Etapa 3 → tela "Selecionar capa": Concluir
     const conclude = await waitFor(
-      () => findButtonByText([/^concluir$/, /^finish$/, /^done$/]),
-      'o botão Concluir após selecionar o Story',
+      () => findButtonByText(DONE_PATTERNS),
+      'o botão Concluir na tela de capa',
     );
-    clickable(conclude).click();
+    realClick(conclude);
     await sleep(1200);
-    toast('ok', `Destaque “${HIGHLIGHT_NAME}” enviado pela interface do Instagram.`, 9000);
+    toast('ok', `Destaque “${HIGHLIGHT_NAME}” criado pela interface do Instagram.`, 9000);
   }
 
-  async function finishUnifiedStage() {
-    sessionStorage.removeItem(UNIFIED_PENDING_KEY);
-    sessionStorage.removeItem('extensionsIG.avl.unified.active');
-    const live = await new Promise(resolve => {
-      try { chrome.runtime.sendMessage({ type: 'liveSession' }, response => resolve(chrome.runtime.lastError ? null : response)); }
-      catch { resolve(null); }
-    });
-    if (!live?.userId) return;
-    const key = UNIFIED_STAGE_PREFIX + String(live.userId);
-    const stored = (await chrome.storage.local.get(key))[key] || { userId: String(live.userId) };
-    await chrome.storage.local.set({ [key]: { ...stored, stage: 'done', updatedAt: Date.now(), lastUrl: location.href } });
-  }
-
-  button.addEventListener('click', async () => {
-    if (button.disabled) return;
+  let running = false;
+  async function runOnce() {
+    if (running) return;
+    running = true;
     button.disabled = true;
     try {
       await createHighlight();
-      await finishUnifiedStage();
     } catch (error) {
       toast('err', `Não foi possível criar o destaque:\n${error?.message || error}`, 12000);
     } finally {
+      running = false;
       button.disabled = false;
     }
-  });
+  }
+  button.addEventListener('click', runOnce);
 
-  // A automação termina aqui: abre o perfil e dispara o botão anexado.
-  // O fluxo de criação continua sendo executado pelo próprio botão.
-  function autoClickOnProfile() {
-    if (!isProfilePage() || sessionStorage.getItem(AUTO_KEY) !== '1' || sessionStorage.getItem(UNIFIED_PENDING_KEY) !== '1') return;
-    if (visible(button)) {
-      sessionStorage.removeItem(AUTO_KEY);
-      setTimeout(() => button.click(), 700);
-    } else {
-      setTimeout(autoClickOnProfile, 300);
-    }
+  // ─────────────────────────── gate: só cria depois do Flashpost ───────────────
+  // O destaque NÃO é mais disparado por Reels nem logo após o cadastro. Ele só
+  // roda quando a conta já foi conectada no Flashpost (o flow-login grava
+  // chrome.storage.local[GATE_KEY]) E estando na página do perfil.
+  let jaCriou = false;
+
+  function mostrarBotao() { button.style.display = isProfilePage() ? '' : 'none'; }
+
+  async function checarGate() {
+    if (running || jaCriou || !isProfilePage()) return;
+    let liberado = false;
+    try { const o = await chrome.storage.local.get(GATE_KEY); liberado = Boolean(o && o[GATE_KEY]); } catch (_) {}
+    if (!liberado) return;
+    jaCriou = true;
+    try { await chrome.storage.local.remove(GATE_KEY); } catch (_) {}
+    setTimeout(runOnce, 800);
   }
 
-  if (isReelsPage() && sessionStorage.getItem(UNIFIED_PENDING_KEY) === '1') {
-    sessionStorage.setItem(AUTO_KEY, '1');
-    const profileLink = findProfileLink();
-    if (profileLink) profileLink.click();
-  } else {
-    autoClickOnProfile();
-  }
+  try {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'local' && changes[GATE_KEY] && changes[GATE_KEY].newValue) checarGate();
+    });
+  } catch (_) {}
+
+  mostrarBotao();
+  checarGate();
   let lastUrl = location.href;
   setInterval(() => {
-    if (location.href !== lastUrl) {
-      lastUrl = location.href;
-      if (isReelsPage() && sessionStorage.getItem(UNIFIED_PENDING_KEY) === '1') sessionStorage.setItem(AUTO_KEY, '1');
-    }
-    if (isReelsPage() && sessionStorage.getItem(AUTO_KEY) === '1' && sessionStorage.getItem(UNIFIED_PENDING_KEY) === '1') {
-      const profileLink = findProfileLink();
-      if (profileLink) profileLink.click();
-    } else {
-      autoClickOnProfile();
-    }
-  }, 500);
+    if (location.href !== lastUrl) { lastUrl = location.href; jaCriou = false; }
+    mostrarBotao();
+    checarGate();
+  }, 800);
 })();

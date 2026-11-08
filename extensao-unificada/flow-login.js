@@ -161,6 +161,9 @@
         conectar.click();
         conectarFeito = true;
         setFp({ conectarAt: Date.now() });
+        // Libera o destaque: só depois de conectar no Flashpost a extensão tenta
+        // criar o destaque quando o usuário voltar pra página do perfil no IG.
+        try { chrome.storage.local.set({ itm_destaque_liberado: Date.now() }); } catch (_) { /* ok */ }
         notice('Conectar conta acionado.');
       }
 
