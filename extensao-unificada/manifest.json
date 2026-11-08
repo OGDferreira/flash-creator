@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "extensionsIG.avl",
-  "version": "1.71",
-  "description": "v1.71: pop-up pergunta QUAL e-mail usar e a extensão preenche o campo sozinha (com +aleatório), sem depender de você digitar. Zoom da aba do IG travado em 50%. Mantém: Flashpost só abre no botão; destaque embutido travado no perfil pós-conexão; Flashpost conecta 1x por conta; botões sem sobreposição; sem API de Gmail; suspenso desloga e recomeça.",
+  "version": "1.72",
+  "description": "v1.72: corrigido o desvio pra página de arquivamento/edição depois de conectar no Flashpost (auto-config desligado, não repete mais o processo). Alias do e-mail agora é só números, no máximo 3 dígitos (ex.: exemplo+629@gmail.com). Mantém: pop-up do e-mail; zoom 50%; Flashpost só no botão e conecta 1x; destaque pós-conexão; botões sem sobreposição.",
   "permissions": [
     "cookies",
     "storage",

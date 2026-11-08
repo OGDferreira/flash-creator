@@ -129,17 +129,16 @@
       } catch (e) { resolve({ ok: false, error: String(e && e.message || e) }); }
     });
   }
-  // Sufixo aleatório pro "+" do Gmail (alias). Ex.: 1234c4 → exemplo+1234c4@gmail.com.
-  function sufixoAleatorio(len = 6) {
-    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  // Sufixo aleatório pro "+" do Gmail (alias). Só NÚMEROS, no máximo 3 dígitos.
+  // Ex.: 7 / 48 / 629 → exemplo+629@gmail.com.
+  function sufixoAleatorio(len) {
+    const chars = '0123456789';
+    const rndInt = (max) => (globalThis.crypto && crypto.getRandomValues)
+      ? crypto.getRandomValues(new Uint32Array(1))[0] % max
+      : Math.floor(Math.random() * max);
+    const tamanho = len ? Math.min(len, 3) : (1 + rndInt(3)); // 1 a 3 dígitos
     let out = '';
-    const rnd = (globalThis.crypto && crypto.getRandomValues)
-      ? crypto.getRandomValues(new Uint32Array(len))
-      : null;
-    for (let i = 0; i < len; i++) {
-      const n = rnd ? rnd[i] : Math.floor(Math.random() * 1e9);
-      out += chars[n % chars.length];
-    }
+    for (let i = 0; i < tamanho; i++) out += chars[rndInt(chars.length)];
     return out;
   }
   // exemplo@gmail.com → exemplo+<aleatorio>@gmail.com. Só mexe em e-mail (tem @),
