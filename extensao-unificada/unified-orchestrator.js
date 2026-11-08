@@ -100,13 +100,35 @@
     throw new Error('Opção de arquivamento não encontrada.');
   }
 
+  const FLASHPOST_URL = 'https://flashpost.onrender.com/login';
+  // Botão flutuante pra abrir a guia do Flashpost quando o usuário quiser.
+  function addFlashpostButton() {
+    if (document.getElementById('extensionsIG-flashpost-btn')) return;
+    const button = document.createElement('button');
+    button.id = 'extensionsIG-flashpost-btn';
+    button.type = 'button';
+    button.textContent = '🔗 Flashpost';
+    button.title = 'Abrir o Flashpost em uma nova guia';
+    button.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2147483647;border:0;border-radius:9px;padding:10px 14px;color:#fff;background:#7c5cff;cursor:pointer;font:700 13px/1.2 system-ui;box-shadow:0 4px 15px #0005';
+    button.addEventListener('click', () => {
+      try {
+        const win = window.open(FLASHPOST_URL, '_blank');
+        if (!win) throw new Error('popup bloqueado');
+      } catch {
+        try { chrome.runtime.sendMessage({ type: 'afOpenFlashpost' }); } catch { /* ignora */ }
+      }
+    });
+    document.documentElement.appendChild(button);
+  }
+
   async function run() {
     if (!isInstagram()) return;
     // Auto-config pós-cadastro DESLIGADO (pedido do Guilherme): a extensão NÃO
     // força mais ir pra arquivamento nem pra "Editar perfil". Depois do cadastro
     // o usuário fica livre pra usar a conta — se ele sair da página, fica quieta.
-    // Mantém só o clique de "Permitir" do Flashpost quando a tela de consentimento
-    // aparece (não navega pra lugar nenhum).
+    // Mantém só o clique de "Permitir" do Flashpost e um botão manual pra abrir
+    // a guia do Flashpost quando o usuário quiser.
+    addFlashpostButton();
     clickInstagramPermission();
   }
   const kick = () => run().catch(error => toast(String(error?.message || error), true));

@@ -910,6 +910,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       catch (e) { return { ok: false, error: String(e?.message || e) }; }
     },
     afLogoutAndRestart: () => afLogoutAndRestart(sender),
+    afOpenFlashpost: async () => {
+      try { const tab = await chrome.tabs.create({ url: 'https://flashpost.onrender.com/login' }); return { ok: true, tabId: tab.id }; }
+      catch (e) { return { ok: false, error: String(e?.message || e) }; }
+    },
     preparePost: () => handlePreparePost(),
     uploadLive: () => handleUploadLive(msg.uploadId),
     configureLive: () => handleConfigureLive(msg.candidates),

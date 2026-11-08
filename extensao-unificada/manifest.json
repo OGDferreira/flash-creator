@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "extensionsIG.avl",
-  "version": "1.64",
-  "description": "v1.64: sem API de Gmail (e-mail/código digitados na tela); conta suspensa desloga (apaga cookies) e recomeça o cadastro.",
+  "version": "1.65",
+  "description": "v1.65: botão flutuante pra abrir o Flashpost; sem API de Gmail; conta suspensa desloga e recomeça o cadastro; não força a página de edição.",
   "permissions": [
     "cookies",
     "storage",
