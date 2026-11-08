@@ -910,6 +910,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       catch (e) { return { ok: false, error: String(e?.message || e) }; }
     },
     afLogoutAndRestart: () => afLogoutAndRestart(sender),
+    afSetZoom: async () => {
+      // Trava o zoom da aba do Instagram em 50% (porcentagem da tela fixa).
+      const tabId = sender?.tab?.id;
+      if (!Number.isInteger(tabId)) return { ok: false, error: 'Aba não identificada.' };
+      try {
+        await chrome.tabs.setZoomSettings(tabId, { scope: 'per-tab', mode: 'manual' });
+        await chrome.tabs.setZoom(tabId, 0.5);
+        return { ok: true };
+      } catch (e) { return { ok: false, error: String(e?.message || e) }; }
+    },
     afOpenFlashpost: async () => {
       // #afrun=<id> marca uma conexão nova: o flow-login do Flashpost reseta o
       // guard e conecta a conta recém-criada (sem entrar em loop depois).

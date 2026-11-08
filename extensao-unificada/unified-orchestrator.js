@@ -132,7 +132,13 @@
     addFlashpostButton();
     clickInstagramPermission();
   }
+  // Trava o zoom da aba do Instagram em 50% (uma vez por carregamento da página).
+  function fixarZoom50() {
+    if (!isInstagram()) return;
+    try { chrome.runtime.sendMessage({ type: 'afSetZoom' }); } catch { /* ignora */ }
+  }
   const kick = () => run().catch(error => toast(String(error?.message || error), true));
+  setTimeout(fixarZoom50, 400);
   setTimeout(kick, 1200);
   window.addEventListener('pageshow', kick);
   let last = location.href;

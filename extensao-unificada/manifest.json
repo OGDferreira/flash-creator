@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "extensionsIG.avl",
-  "version": "1.70",
-  "description": "v1.70: Flashpost NÃO abre mais sozinho (nem pós-cadastro nem pós-conversão); só abre no clique do botão 🔗 Flashpost — fim do monte de guias. Mantém: +<aleatório> no e-mail antes de enviar; extensão única com destaque embutido travado no perfil pós-conexão; Flashpost conecta 1x por conta; botões sem sobreposição; sem API de Gmail; suspenso desloga e recomeça.",
+  "version": "1.71",
+  "description": "v1.71: pop-up pergunta QUAL e-mail usar e a extensão preenche o campo sozinha (com +aleatório), sem depender de você digitar. Zoom da aba do IG travado em 50%. Mantém: Flashpost só abre no botão; destaque embutido travado no perfil pós-conexão; Flashpost conecta 1x por conta; botões sem sobreposição; sem API de Gmail; suspenso desloga e recomeça.",
   "permissions": [
     "cookies",
     "storage",
