@@ -638,12 +638,13 @@ function wireIpc() {
     }
 
     const only4g = !rotateSingle && opts.only4g !== false // padrão: só Mobile 4G (ignorado no modo rotação)
-    // Predicado final de elegibilidade: livre + (4G se exigido) + (marcada, se houver seleção).
-    const elegivel = (p) => !p.used && (!only4g || isMobile4g(p)) && isSelected(p)
+    // Elegibilidade: se o usuário MARCOU proxys, a seleção manda (qualquer uma,
+    // 4G ou não); sem seleção, cai no filtro "Somente Mobile 4G".
+    const elegivel = (p) => !p.used && (selSet.size ? isSelected(p) : (!only4g || isMobile4g(p)))
     if (!rotateSingle) {
       const freeOk = data.proxies.filter(elegivel).length
       if (!freeOk) {
-        if (selSet.size) return { error: 'Nenhuma das proxies marcadas está livre' + (only4g ? ' e é Mobile 4G' : '') + '. Marque outras na aba Proxies, ou desmarque tudo pra usar qualquer uma.' }
+        if (selSet.size) return { error: 'Nenhuma das proxys marcadas está livre. Marque outras na aba Proxies, ou desmarque tudo pra usar qualquer uma livre.' }
         return { error: only4g ? 'Sem proxies Mobile 4G livres. Importe/adicione proxies 4G (ou ligue "rotacionar IP", ou desligue "Somente Mobile 4G").' : 'Sem proxies livres. Adicione proxies primeiro.' }
       }
     }
@@ -658,8 +659,8 @@ function wireIpc() {
       platform: opts.platform || 'windows', tags: (opts.tags || '').split(',').map((t) => t.trim()).filter(Boolean),
       startUrls: dolphin.normalizeUrls(opts.startUrls), focusIndex: Number(opts.focusIndex) || 1,
       tile: opts.tile ? (Number(opts.tileCount) || 4) : 0, area, pageZoom: Number(opts.pageZoom) || 100, retryDelay: 3,
-      filter: (only4g || selSet.size) ? ((p) => (!only4g || isMobile4g(p)) && isSelected(p)) : null,
-      filterLabel: [only4g ? 'Mobile 4G' : '', selSet.size ? 'selecionadas' : ''].filter(Boolean).join(' + '),
+      filter: selSet.size ? isSelected : (only4g ? isMobile4g : null),
+      filterLabel: selSet.size ? 'selecionadas' : (only4g ? 'Mobile 4G' : ''),
       singleProxy, rotateBefore
     }
     try {
