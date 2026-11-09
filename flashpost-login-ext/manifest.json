@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Flashpost Login",
+  "version": "1.0",
+  "description": "Abre o Flashpost e faz login, clica em Conectar conta e em Permitir automaticamente (uma vez). Botão no popup pra abrir a página.",
+  "permissions": [],
+  "host_permissions": [
+    "https://flashpost.onrender.com/*",
+    "http://flashpost.onrender.com/*"
+  ],
+  "action": {
+    "default_title": "Flashpost Login",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://flashpost.onrender.com/*",
+        "http://flashpost.onrender.com/*"
+      ],
+      "js": ["flow-login.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
