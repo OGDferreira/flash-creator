@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "extensionsIG.avl",
-  "version": "1.51",
-  "description": "v1.51: rebrand Clara — nome Clara, link do Telegram t.me/claragmbot?start=init, nova foto de perfil padrão e destaque com a mesma pílula em fundo preto.",
+  "version": "1.52",
+  "description": "v1.52: rebrand Clara — nome Clara, link do Telegram t.me/claragmbot?start=init, nova foto de perfil padrão e destaque com a mesma pílula em fundo preto; link da figurinha centralizado pra cair em cima da pílula.",
   "permissions": [
     "cookies",
     "storage",

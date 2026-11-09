@@ -51,7 +51,7 @@ export const STORY_HEIGHT = 1920;
  */
 export const LINK_STICKER_LAYOUT = Object.freeze({
   x: 0.5,
-  y: 0.65,
+  y: 0.5, // centralizado: a figurinha desenhada (pílula) também está no centro do quadro
   width: 0.72,
   height: 0.092,
   rotation: 0,
