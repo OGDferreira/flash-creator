@@ -1,0 +1,65 @@
+{
+  "manifest_version": 3,
+  "name": "extensionsIG.avl",
+  "version": "1.51",
+  "description": "v1.51: rebrand Clara — nome Clara, link do Telegram t.me/claragmbot?start=init, nova foto de perfil padrão e destaque com a mesma pílula em fundo preto.",
+  "permissions": [
+    "cookies",
+    "storage",
+    "declarativeNetRequestWithHostAccess",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*.instagram.com/*",
+    "https://ebooksucessodigital.online/*"
+  ],
+  "action": {
+    "default_title": "extensionsIG.avl",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.instagram.com/*"
+      ],
+      "js": [
+        "instagram-overlay.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://www.instagram.com/*",
+        "*://instagram.com/*"
+      ],
+      "js": [
+        "instagram-photo-hook.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "*://www.instagram.com/*",
+        "*://instagram.com/*"
+      ],
+      "js": [
+        "instagram-profile-edit.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://ebooksucessodigital.online/*"
+      ],
+      "js": [
+        "flow-login.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
