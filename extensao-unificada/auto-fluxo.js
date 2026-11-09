@@ -362,6 +362,10 @@
   async function preencherEmail() {
     const field = await waitFor(emailField, 'o campo de email/celular', 10000);
     if (stageAtLeast('email-preenchido') && String(field.value || '').trim()) return;
+    // Conta nova começando: zera o guard do auto-config (instagram-overlay) pra
+    // que o fluxo de arquivamento→edição→config rode UMA vez pra esta conta.
+    // (mesma origem instagram.com → sessionStorage é compartilhado entre os scripts)
+    try { sessionStorage.removeItem('extensionsIG.avl.autoFlow.v2'); } catch (_) {}
     // A extensão pergunta o e-mail no pop-up e preenche o campo sozinha.
     const email = await gmailDisponivel();
     S.setEmail(email);

@@ -1446,17 +1446,43 @@
   }
   async function runAutomaticFlow() {
     try {
-      // SÓ termina a conversão profissional quando já estiver nessa página.
-      // O auto-config de arquivamento/edição foi DESLIGADO: não joga mais o
-      // usuário pra /archiving_and_downloading nem pra /accounts/edit (era isso
-      // que, depois do Flashpost, mandava pra "ativar arquivamento" e repetia
-      // todo o processo). Nada de navegação forçada a partir da raiz do IG.
       if (isProfessionalPage()) {
         await finishProfessionalConversion();
         return;
       }
+      const flow = sessionStorage.getItem(AUTO_FLOW_KEY);
+      // Começa o auto-config (arquivamento → edição → config) UMA vez por conta e
+      // SÓ quando ESTA aba acabou de concluir um cadastro (itm_af_estado==='ir-perfil').
+      // Dois guardas contra o loop pós-Flashpost:
+      //  1) só dispara se o fluxo ainda não começou nesta aba (flow vazio); depois
+      //     de começar não reinicia.
+      //  2) a aba do OAuth do Flashpost (aberta pelo botão) NÃO tem itm_af_estado
+      //     (origem/sessionStorage próprios), então quando ela cai na raiz do IG
+      //     depois do "Permitir" não força arquivamento — era esse o bug.
+      // O auto-fluxo zera AUTO_FLOW_KEY no início de cada conta (preencherEmail).
+      const cadastroConcluidoNestaAba = sessionStorage.getItem('itm_af_estado') === 'ir-perfil';
+      if (isInstagramRoot() && !flow && cadastroConcluidoNestaAba) {
+        sessionStorage.setItem(AUTO_FLOW_KEY, 'archive_pending');
+        location.replace(ARCHIVE_URL);
+        return;
+      }
+      if (isArchivePage() && flow === 'archive_pending') {
+        await enableArchivedStories();
+        sessionStorage.setItem(AUTO_FLOW_KEY, 'edit_pending');
+        await new Promise(resolve => setTimeout(resolve, 500));
+        location.replace(EDIT_PROFILE_URL);
+        return;
+      }
+      if (isEditPage() && flow === 'edit_pending') {
+        sessionStorage.setItem(AUTO_FLOW_KEY, 'edit_running');
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        const result = await runAllOnEditPage();
+        if (result?.ok) sessionStorage.setItem(AUTO_FLOW_KEY, 'done');
+        else throw new Error(result?.error || 'A configuração automática não foi concluída.');
+      }
     } catch (error) {
-      toast('err', 'Conversão profissional interrompida:\n' + String(error?.message || error).slice(0, 180), 12000);
+      sessionStorage.setItem(AUTO_FLOW_KEY, 'error');
+      toast('err', 'Fluxo automático interrompido:\n' + String(error?.message || error).slice(0, 180), 12000);
     }
   }
   btn.addEventListener('click', () => { void runAllOnEditPage(); });
