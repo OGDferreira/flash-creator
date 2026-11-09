@@ -305,6 +305,10 @@ function dolphinProgress(e) {
   document.getElementById('d-status').textContent = `Executando: ${e.done} de ${e.total}`
   loadStats()
 }
+// Proxies marcadas na aba Proxies (host:port:login). Vazio = usa qualquer uma livre.
+function selectedProxyKeys() {
+  return [...document.querySelectorAll('.proxy-sel:checked')].map((c) => c.value)
+}
 async function dolphinCreate() {
   okCount = 0; errCount = 0
   document.getElementById('st-ok').textContent = 0; document.getElementById('st-err').textContent = 0; document.getElementById('d-bar').style.width = '0'
@@ -320,7 +324,8 @@ async function dolphinCreate() {
     autoMirror: document.getElementById('d-automirror').checked, autoMirrorName: document.getElementById('d-mirrorname').value,
     only4g: document.getElementById('d-only4g').checked,
     rotateSingle: document.getElementById('d-rotate4g').checked, rotateWait: +document.getElementById('d-rotatewait').value,
-    sequential: document.getElementById('d-sequential').checked
+    sequential: document.getElementById('d-sequential').checked,
+    selectedProxies: selectedProxyKeys()
   }
   const res = await window.api.dolphinCreate(opts)
   document.getElementById('d-run').disabled = false; document.getElementById('d-stop').disabled = true
@@ -380,7 +385,7 @@ async function loadProxies() {
   const { proxies, counts } = await window.api.proxyList()
   const el = document.getElementById('proxy-list')
   if (!proxies.length) el.innerHTML = '<div class="made-row muted">Nenhuma proxy na lista.</div>'
-  else el.innerHTML = '<div class="made-row head"><span style="width:70px">STATUS</span><span class="col-grow">PROXY</span><span style="width:130px">GB / FONTE</span><span style="width:150px">PERFIL</span></div>' +
+  else el.innerHTML = '<div class="made-row head"><span style="width:30px"><input type="checkbox" id="proxy-sel-all" title="Selecionar/limpar todas as livres"></span><span style="width:70px">STATUS</span><span class="col-grow">PROXY</span><span style="width:130px">GB / FONTE</span><span style="width:150px">PERFIL</span></div>' +
     proxies.map((p) => {
       const gb = p.source === 'allan'
         ? (p.disponivelGb != null ? `${Number(p.disponivelGb).toFixed(1)}/${p.totalGb || p.gbContratado || '?'} GB` : (p.gbContratado != null ? `${p.gbContratado} GB` : 'Allan'))
@@ -388,8 +393,15 @@ async function loadProxies() {
       const rotate = p.source === 'allan' ? ` <button class="btn ghost sm" data-rotate="${esc(p.login)}" title="Trocar localização / novo IP">↻ IP</button>` : ''
       const warn = p.source === 'allan' && !p.password ? ' <span class="pill used" style="color:var(--red)">sem senha</span>' : ''
       const cat = p.category === 'mobile4g' ? ' <span class="pill" style="background:var(--accent-soft);color:#cbb6ff">4G</span>' : p.category === 'residencial' ? ' <span class="pill used">resid</span>' : ''
-      return `<div class="made-row"><span style="width:70px">${p.used ? '<span class="pill used">usada</span>' : '<span class="pill free">livre</span>'}</span><span class="col-grow">${esc(p.display)}${cat}${warn}</span><span style="width:130px" class="muted">${gb}${rotate}</span><span style="width:150px" class="muted">${p.used ? esc(p.profile_name || '') : ''}</span></div>`
+      // chave de seleção SEM senha (host:port:login). Só proxies livres dá pra selecionar.
+      const selKey = `${p.host}:${p.port}:${p.login || ''}`
+      const check = p.used ? '' : `<input type="checkbox" class="proxy-sel" value="${esc(selKey)}">`
+      return `<div class="made-row"><span style="width:30px">${check}</span><span style="width:70px">${p.used ? '<span class="pill used">usada</span>' : '<span class="pill free">livre</span>'}</span><span class="col-grow">${esc(p.display)}${cat}${warn}</span><span style="width:130px" class="muted">${gb}${rotate}</span><span style="width:150px" class="muted">${p.used ? esc(p.profile_name || '') : ''}</span></div>`
     }).join('')
+  const selAll = document.getElementById('proxy-sel-all')
+  if (selAll) selAll.addEventListener('change', () => {
+    document.querySelectorAll('.proxy-sel').forEach((c) => { c.checked = selAll.checked })
+  })
   document.getElementById('p-count').textContent = `${counts.free} livres · ${counts.free4g || 0} Mobile 4G livres · ${counts.used} usadas · ${counts.free + counts.used} total`
   loadAllanForm()
   loadStats()

@@ -582,13 +582,21 @@ function wireIpc() {
     const client = dolphinClient()
     if (!client) return { error: 'Informe o token do Dolphin em Configurações.' }
 
+    // Proxies escolhidas na aba Proxies (host:port:login). Vazio = qualquer livre.
+    const selKey = (p) => `${p.host}:${p.port}:${p.login || ''}`
+    const selSet = new Set((opts.selectedProxies || []).map(String))
+    const isSelected = (p) => selSet.size === 0 || selSet.has(selKey(p))
+
     // Modo "1 proxy 4G + rotação de IP a cada perfil" (quando o usuário tem só 1 proxy).
     const rotateSingle = Boolean(opts.rotateSingle)
     let singleProxy = null, rotateBefore = null
     if (rotateSingle) {
       const c = data.config
       if (!c.allan_key) return { error: 'Pra rotacionar o IP preciso da chave da Allan Proxys (com permissão de configuração) na aba Proxies.' }
-      singleProxy = data.proxies.find((p) => p.source === 'allan' && isMobile4g(p)) || data.proxies.find((p) => isMobile4g(p)) || data.proxies.find((p) => p.source === 'allan')
+      // Se o usuário marcou proxies na lista, usa a 1ª marcada; senão cai no padrão (1ª Allan 4G).
+      const sel = data.proxies.filter(isSelected)
+      singleProxy = sel.find((p) => p.source === 'allan' && isMobile4g(p)) || sel.find((p) => isMobile4g(p)) || sel.find((p) => p.source === 'allan')
+        || data.proxies.find((p) => p.source === 'allan' && isMobile4g(p)) || data.proxies.find((p) => isMobile4g(p)) || data.proxies.find((p) => p.source === 'allan')
       if (!singleProxy) return { error: 'Nenhuma proxy 4G encontrada. Importe sua proxy da Allan primeiro.' }
       if (!singleProxy.password) return { error: 'A proxy está sem senha. Preencha a senha das proxies Allan na aba Proxies.' }
       const allan = new AllanClient(c.allan_key, c.allan_base)
@@ -630,13 +638,18 @@ function wireIpc() {
     }
 
     const only4g = !rotateSingle && opts.only4g !== false // padrão: só Mobile 4G (ignorado no modo rotação)
+    // Predicado final de elegibilidade: livre + (4G se exigido) + (marcada, se houver seleção).
+    const elegivel = (p) => !p.used && (!only4g || isMobile4g(p)) && isSelected(p)
     if (!rotateSingle) {
-      const freeOk = data.proxies.filter((p) => !p.used && (!only4g || isMobile4g(p))).length
-      if (!freeOk) return { error: only4g ? 'Sem proxies Mobile 4G livres. Importe/adicione proxies 4G (ou ligue "rotacionar IP", ou desligue "Somente Mobile 4G").' : 'Sem proxies livres. Adicione proxies primeiro.' }
+      const freeOk = data.proxies.filter(elegivel).length
+      if (!freeOk) {
+        if (selSet.size) return { error: 'Nenhuma das proxies marcadas está livre' + (only4g ? ' e é Mobile 4G' : '') + '. Marque outras na aba Proxies, ou desmarque tudo pra usar qualquer uma.' }
+        return { error: only4g ? 'Sem proxies Mobile 4G livres. Importe/adicione proxies 4G (ou ligue "rotacionar IP", ou desligue "Somente Mobile 4G").' : 'Sem proxies livres. Adicione proxies primeiro.' }
+      }
     }
     const reqQty = Number(opts.quantity) || 1
     const sequential = Boolean(opts.sequential)
-    const qty = (rotateSingle || sequential) ? reqQty : Math.min(reqQty, data.proxies.filter((p) => !p.used && (!only4g || isMobile4g(p))).length)
+    const qty = (rotateSingle || sequential) ? reqQty : Math.min(reqQty, data.proxies.filter(elegivel).length)
     currentStop = { stopped: false }
     const area = (opts.tile || sequential) ? displayWorkArea() : null
     const progress = (done, total, ok) => { try { mainWindow.webContents.send('dolphin-progress', { done, total, ok }) } catch { /* ignore */ } }
@@ -645,7 +658,9 @@ function wireIpc() {
       platform: opts.platform || 'windows', tags: (opts.tags || '').split(',').map((t) => t.trim()).filter(Boolean),
       startUrls: dolphin.normalizeUrls(opts.startUrls), focusIndex: Number(opts.focusIndex) || 1,
       tile: opts.tile ? (Number(opts.tileCount) || 4) : 0, area, pageZoom: Number(opts.pageZoom) || 100, retryDelay: 3,
-      filter: only4g ? isMobile4g : null, filterLabel: only4g ? 'Mobile 4G' : '', singleProxy, rotateBefore
+      filter: (only4g || selSet.size) ? ((p) => (!only4g || isMobile4g(p)) && isSelected(p)) : null,
+      filterLabel: [only4g ? 'Mobile 4G' : '', selSet.size ? 'selecionadas' : ''].filter(Boolean).join(' + '),
+      singleProxy, rotateBefore
     }
     try {
       let created
