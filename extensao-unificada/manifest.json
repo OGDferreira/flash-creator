@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "extensionsIG.avl",
-  "version": "1.73",
-  "description": "v1.73: fluxo de auto-config (arquivamento → edição → ativar botões → config) DE VOLTA, mas rodando UMA vez por conta e só na aba que acabou o cadastro — a aba do OAuth do Flashpost não força mais a página do IG nem repete o processo. Mantém: pop-up do e-mail (+número, máx 3 díg.); zoom 50%; Flashpost só no botão e conecta 1x; destaque pós-conexão; botões sem sobreposição.",
+  "version": "1.74",
+  "description": "v1.74: sem pop-up — você digita/cola o e-mail no campo do Instagram e a extensão só acrescenta o +número (máx 3 díg.) antes de enviar. Botão Flashpost mais rápido: abre a guia, login, Conectar conta e Permitir, só isso (delays reduzidos). Mantém: auto-config 1x por conta sem loop pós-Flashpost; zoom 50%; conecta 1x; destaque pós-conexão; botões sem sobreposição.",
   "permissions": [
     "cookies",
     "storage",

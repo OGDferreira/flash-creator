@@ -43,7 +43,7 @@
       if (input._valueTracker) input._valueTracker.setValue(acc.slice(0, -1));
       input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: ch }));
       input.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: ch }));
-      await sleep(60);
+      await sleep(18);
     }
     input.dispatchEvent(new Event('change', { bubbles: true }));
   }
@@ -77,7 +77,7 @@
     while (Date.now() < end) {
       const r = find();
       if (r) return r;
-      await sleep(300);
+      await sleep(120);
     }
     return null;
   }
@@ -193,9 +193,9 @@
 
   // Observer com pequena folga (debounce) pra não disparar em rajada.
   let kickTimer = null;
-  const kick = () => { if (kickTimer) return; kickTimer = setTimeout(() => { kickTimer = null; run().catch((e) => notice('Flashpost: ' + (e?.message || e), true)); }, 500); };
+  const kick = () => { if (kickTimer) return; kickTimer = setTimeout(() => { kickTimer = null; run().catch((e) => notice('Flashpost: ' + (e?.message || e), true)); }, 150); };
   const observer = new MutationObserver(() => { if (!stopped && !permitirFeito) kick(); });
   observer.observe(document.documentElement, { subtree: true, childList: true });
-  setTimeout(kick, 1200);
+  setTimeout(kick, 300);
   window.addEventListener('pageshow', kick);
 })();

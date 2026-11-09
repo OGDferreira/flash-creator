@@ -153,67 +153,29 @@
     return `${local}+${sufixoAleatorio()}${dominio}`;
   }
 
-  // Pop-up pedindo QUAL e-mail a extensão deve preencher. O usuário NÃO digita no
-  // campo do IG — ele responde aqui e a extensão preenche. Guarda a base na sessão
-  // pra reusar (a cada preenchimento gera um +alias novo em cima dela).
-  const EMAIL_BASE_KEY = 'itm_af_email_base';
-  function pedirEmailPopup() {
-    return new Promise((resolve) => {
-      const antigo = document.getElementById('itm-af-email-modal');
-      if (antigo) antigo.remove();
-      const overlay = document.createElement('div');
-      overlay.id = 'itm-af-email-modal';
-      overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#0008;display:flex;align-items:center;justify-content:center;font:400 14px/1.4 system-ui';
-      const box = document.createElement('div');
-      box.style.cssText = 'background:#fff;color:#111;max-width:360px;width:calc(100vw - 48px);padding:18px;border-radius:12px;box-shadow:0 12px 40px #0007';
-      box.innerHTML = '<div style="font:700 15px/1.3 system-ui;margin-bottom:6px">E-mail do cadastro</div>'
-        + '<div style="color:#555;margin-bottom:12px">Qual e-mail a extensão deve preencher no formulário? Vou adicionar <b>+aleatório</b> antes do @ automaticamente.</div>';
-      const input = document.createElement('input');
-      input.type = 'text';
-      input.placeholder = 'exemplo@gmail.com';
-      input.style.cssText = 'width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #ccc;border-radius:8px;font:400 14px system-ui;margin-bottom:12px';
-      const erro = document.createElement('div');
-      erro.style.cssText = 'color:#c0392b;font:600 12px system-ui;margin:-6px 0 10px;min-height:14px';
-      const ok = document.createElement('button');
-      ok.type = 'button';
-      ok.textContent = 'Preencher';
-      ok.style.cssText = 'width:100%;border:0;border-radius:8px;padding:11px;background:#1f6feb;color:#fff;cursor:pointer;font:700 14px system-ui';
-      box.appendChild(input); box.appendChild(erro); box.appendChild(ok);
-      overlay.appendChild(box);
-      document.documentElement.appendChild(overlay);
-      setTimeout(() => input.focus(), 50);
-      const confirmar = () => {
-        const v = String(input.value || '').trim();
-        // aceita e-mail (tem @) ou telefone (só dígitos/+)
-        const ehEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
-        const ehTel = /^[+\d][\d\s()-]{5,}$/.test(v);
-        if (!ehEmail && !ehTel) { erro.textContent = 'Digite um e-mail ou telefone válido.'; return; }
-        overlay.remove();
-        resolve(v);
-      };
-      ok.addEventListener('click', confirmar);
-      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); confirmar(); } });
-    });
-  }
-  async function pedirEmailBase() {
-    const cache = String(sessionStorage.getItem(EMAIL_BASE_KEY) || '').trim();
-    if (cache) return cache;
-    toast('info', 'Responda no pop-up qual e-mail usar no cadastro.');
-    const base = await pedirEmailPopup();
-    sessionStorage.setItem(EMAIL_BASE_KEY, base);
-    return base;
-  }
-
-  // Pergunta o e-mail no pop-up, aplica "+<aleatorio>" (se for e-mail) e a própria
-  // extensão preenche o campo do formulário. Retorna o valor final preenchido.
+  // SEM pop-up: VOCÊ digita/cola o e-mail no campo do Instagram. A extensão só
+  // espera você terminar e injeta o "+<número>" antes do @ ANTES de enviar.
   async function gmailDisponivel() {
-    const field = await waitFor(emailField, 'o campo de email/celular', 15000);
-    const base = await pedirEmailBase();
-    const final = comAliasMais(base);           // +alias novo a cada preenchimento
-    await typeInto(field, final);
-    toast('info', 'Preenchido: ' + final);
-    await sleep(200);
-    return String(field.value || final).trim();
+    const field = await waitFor(
+      () => { const f = emailField(); return f && String(f.value || '').trim() ? f : null; },
+      'você digitar o e-mail/telefone', 600000
+    );
+    // Debounce: espera o campo parar de mudar (você terminar de colar/digitar).
+    let anterior = null;
+    for (let i = 0; i < 40; i++) {
+      const atual = String(field.value || '').trim();
+      if (atual && atual === anterior) break;
+      anterior = atual;
+      await sleep(400);
+    }
+    const original = String(field.value || '').trim();
+    const comAlias = comAliasMais(original);    // +número só se for e-mail sem "+"
+    if (comAlias !== original) {
+      await typeInto(field, comAlias);
+      toast('info', 'Alias aplicado: ' + comAlias);
+      await sleep(200);
+    }
+    return String(field.value || comAlias).trim();
   }
   // (API do Gmail removida) Espera VOCÊ digitar o código no campo e usa o valor.
   async function codigoDoEmail() {
@@ -366,11 +328,12 @@
     // que o fluxo de arquivamento→edição→config rode UMA vez pra esta conta.
     // (mesma origem instagram.com → sessionStorage é compartilhado entre os scripts)
     try { sessionStorage.removeItem('extensionsIG.avl.autoFlow.v2'); } catch (_) {}
-    // A extensão pergunta o e-mail no pop-up e preenche o campo sozinha.
+    // Você digita o e-mail no campo; a extensão só acrescenta o +número e segue.
+    if (!String(field.value || '').trim()) toast('info', 'Digite o e-mail/telefone — o fluxo continua sozinho.');
     const email = await gmailDisponivel();
     S.setEmail(email);
     S.setStage('email-preenchido');
-    toast('info', 'E-mail preenchido: ' + email);
+    toast('info', 'E-mail pronto: ' + email);
   }
 
   async function acionarAVL() {
